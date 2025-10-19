@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Calendar, TrendingUp, Image as ImageIcon, Award } from 'lucide-react-native';
 import { ProgressCharts } from '@/components/ProgressCharts';
+import { useTabBarPadding } from '@/hooks/useTabBarPadding';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 48;
@@ -32,6 +33,7 @@ interface DailyData {
 export default function ProgressTab() {
   const router = useRouter();
   const { user } = useAuth();
+  const { contentPadding } = useTabBarPadding();
   const [timeRange, setTimeRange] = useState<TimeRange>('week');
   const [loading, setLoading] = useState(true);
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
@@ -190,7 +192,7 @@ export default function ProgressTab() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.scrollContent, { paddingBottom: contentPadding }]}>
       <LinearGradient colors={['#10b981', '#059669']} style={styles.header}>
         <Text style={styles.headerTitle}>Your Progress</Text>
         <Text style={styles.headerSubtitle}>Track your nutrition journey</Text>
@@ -279,9 +281,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
-  scrollContent: {
-    paddingBottom: 40,
-  },
+  scrollContent: {},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

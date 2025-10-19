@@ -23,10 +23,12 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { useTabBarPadding } from '@/hooks/useTabBarPadding';
 
 export default function ProfileTab() {
   const router = useRouter();
   const { user, profile, signOut } = useAuth();
+  const { contentPadding } = useTabBarPadding();
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -45,7 +47,7 @@ export default function ProfileTab() {
   const isPremium = profile?.subscription_tier === 'premium' || profile?.subscription_tier === 'lifetime';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.scrollContent, { paddingBottom: contentPadding }]}>
       <LinearGradient colors={['#10b981', '#059669']} style={styles.header}>
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
@@ -250,9 +252,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
-  scrollContent: {
-    paddingBottom: 40,
-  },
+  scrollContent: {},
   header: {
     paddingTop: 60,
     paddingBottom: 32,
