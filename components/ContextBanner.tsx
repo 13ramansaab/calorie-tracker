@@ -98,7 +98,7 @@ export function ContextBanner({
           {hasImpact && (
             <View style={styles.impactNote}>
               <Text style={styles.impactNoteText}>
-                ✓ We used your note to refine portions and identification
+                Used your note to refine estimates.
               </Text>
             </View>
           )}

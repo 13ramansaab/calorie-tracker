@@ -21,34 +21,48 @@ interface ContextAssistBoxProps {
     items: string[];
     frequency: number;
   }>;
+  onLengthWarning?: (warning: string) => void;
 }
 
 const DEFAULT_EXAMPLES = [
   '2 chapati + 1 bowl paneer bhurji',
-  '1 cup dal + 1 katori rice + salad',
+  '1 cup dal + 1 katori rice',
   'idli (3) + sambar (1 katori)',
-  '2 paratha with aloo sabzi',
-  'dosa (1) + coconut chutney + sambar',
-  '1 plate biryani with raita',
-  '3 roti + dal fry + bhindi masala',
 ];
 
 export function ContextAssistBox({
   value,
   onChange,
   maxLength = 140,
-  placeholder = 'e.g., 2 chapati + dal, 3 idlis with sambar',
+  placeholder = '2 chapati + 1 bowl paneer bhurji',
   examples = DEFAULT_EXAMPLES,
   langHint,
   repeatMealSuggestions = [],
+  onLengthWarning,
 }: ContextAssistBoxProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
+  const [showLengthWarning, setShowLengthWarning] = useState(false);
 
   const charCount = value.length;
   const isNearLimit = charCount > maxLength * 0.8;
   const isOverLimit = charCount > maxLength;
+
+  useEffect(() => {
+    if (isOverLimit) {
+      setShowLengthWarning(true);
+      onLengthWarning?.('Keep it short—counts and units work best.');
+
+      const timer = setTimeout(() => {
+        setShowLengthWarning(false);
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    } else {
+      setShowLengthWarning(false);
+    }
+  }, [isOverLimit, onLengthWarning]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -65,11 +79,8 @@ export function ContextAssistBox({
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <MessageSquare size={18} color="#10b981" />
-          <Text style={styles.title}>Add Context (Optional)</Text>
+          <Text style={styles.title}>Add a quick note (optional)</Text>
         </View>
-        <Text style={styles.subtitle}>
-          Help AI identify portions & items more accurately
-        </Text>
       </View>
 
       {!isFocused && !value && (
@@ -187,17 +198,27 @@ export function ContextAssistBox({
         </TouchableOpacity>
       )}
 
-      <View style={styles.infoBox}>
-        <Text style={styles.infoText}>
-          💡 Include quantities (e.g., "2 rotis", "1 cup", "small bowl") for better portion estimates
-          {langHint && (
-            <Text style={styles.langHintText}>
-              {' '}
-              • {langHint}
-            </Text>
-          )}
-        </Text>
-      </View>
+      {showLengthWarning && (
+        <View style={styles.warningBox}>
+          <Text style={styles.warningText}>
+            Keep it short—counts and units work best.
+          </Text>
+        </View>
+      )}
+
+      {!showLengthWarning && (value.length > 0 || isFocused) && (
+        <View style={styles.infoBox}>
+          <Text style={styles.infoText}>
+            Tip: add counts like '2 chapati' or units like '1 katori dal' to improve accuracy.
+            {langHint && (
+              <Text style={styles.langHintText}>
+                {' '}
+                • {langHint}
+              </Text>
+            )}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -354,6 +375,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6b7280',
     fontStyle: 'italic',
+  },
+  warningBox: {
+    padding: 10,
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+  },
+  warningText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
   },
   repeatSuggestionsSection: {
     gap: 8,

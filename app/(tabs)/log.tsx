@@ -7,18 +7,35 @@ import {
   Platform,
   Alert,
   Image,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Camera, Image as ImageIcon, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useAuth } from '@/contexts/AuthContext';
+import { AIAnalysisSheet } from '@/components/AIAnalysisSheet';
+import { ContextAssistBox } from '@/components/ContextAssistBox';
+import { runPhotoAnalysis } from '@/lib/ai/analysisOrchestrator';
 
 export default function LogTab() {
+  const { user, profile } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [userNote, setUserNote] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const [showAnalysisSheet, setShowAnalysisSheet] = useState(false);
+  const [mealType, setMealType] = useState('lunch');
   const cameraRef = useRef<CameraView>(null);
 
   const requestCameraPermission = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to use this feature');
+      return;
+    }
+
     const { status } = await requestPermission();
     if (status === 'granted') {
       setCameraActive(true);
@@ -31,6 +48,11 @@ export default function LogTab() {
   };
 
   const pickImage = async () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to use this feature');
+      return;
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== 'granted') {
@@ -70,15 +92,72 @@ export default function LogTab() {
     }
   };
 
-  const handleUsePhoto = () => {
-    Alert.alert('Coming Soon', 'AI analysis will be implemented next');
+  const handleAnalyzePhoto = async () => {
+    if (!capturedImage || !user) return;
+
+    setAnalyzing(true);
+
+    try {
+      const result = await runPhotoAnalysis({
+        photoUri: capturedImage,
+        userNote: userNote.trim() || undefined,
+        mealType,
+        userId: user.id,
+        userRegion: profile?.region,
+        dietaryPrefs: profile?.dietary_preferences,
+      });
+
+      if (result.warnings.length > 0) {
+        Alert.alert('Note', result.warnings.join('\n'));
+      }
+
+      setAnalysisId(result.analysisId);
+      setShowAnalysisSheet(true);
+    } catch (error) {
+      console.error('Analysis failed:', error);
+      Alert.alert(
+        'Analysis Failed',
+        'Unable to analyze your meal. Would you like to log it manually?',
+        [
+          { text: 'Try Again', style: 'cancel' },
+          {
+            text: 'Log Manually',
+            onPress: () => {
+              handleRetake();
+              Alert.alert('Coming Soon', 'Manual food search will be available soon');
+            },
+          },
+        ]
+      );
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleRetake = () => {
     setCapturedImage(null);
+    setUserNote('');
+    setAnalysisId(null);
+    setShowAnalysisSheet(false);
     if (Platform.OS !== 'web') {
       setCameraActive(true);
     }
+  };
+
+  const handleSaveFromAnalysis = () => {
+    setCapturedImage(null);
+    setUserNote('');
+    setAnalysisId(null);
+    setShowAnalysisSheet(false);
+    Alert.alert('Success', 'Meal logged successfully!');
+  };
+
+  const getCurrentMealType = (): string => {
+    const hour = new Date().getHours();
+    if (hour < 11) return 'breakfast';
+    if (hour < 15) return 'lunch';
+    if (hour < 18) return 'snack';
+    return 'dinner';
   };
 
   if (capturedImage) {
@@ -92,18 +171,76 @@ export default function LogTab() {
           <View style={styles.closeButton} />
         </View>
 
-        <View style={styles.previewContainer}>
-          <Image source={{ uri: capturedImage }} style={styles.preview} resizeMode="contain" />
-        </View>
+        <ScrollView style={styles.reviewScroll} contentContainerStyle={styles.reviewContent}>
+          <View style={styles.previewContainer}>
+            <Image source={{ uri: capturedImage }} style={styles.preview} resizeMode="cover" />
+          </View>
+
+          <View style={styles.formSection}>
+            <Text style={styles.sectionLabel}>Meal Type</Text>
+            <View style={styles.mealTypeChips}>
+              {['breakfast', 'lunch', 'snack', 'dinner'].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.mealTypeChip,
+                    mealType === type && styles.mealTypeChipActive,
+                  ]}
+                  onPress={() => setMealType(type)}
+                >
+                  <Text
+                    style={[
+                      styles.mealTypeChipText,
+                      mealType === type && styles.mealTypeChipTextActive,
+                    ]}
+                  >
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <ContextAssistBox
+              value={userNote}
+              onChange={setUserNote}
+              maxLength={140}
+              placeholder="2 chapati + 1 bowl paneer bhurji"
+            />
+          </View>
+        </ScrollView>
 
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleRetake}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={handleRetake}
+            disabled={analyzing}
+          >
             <Text style={styles.secondaryButtonText}>Retake</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.primaryButton} onPress={handleUsePhoto}>
-            <Text style={styles.primaryButtonText}>Use Photo</Text>
+          <TouchableOpacity
+            style={[styles.primaryButton, analyzing && styles.primaryButtonDisabled]}
+            onPress={handleAnalyzePhoto}
+            disabled={analyzing}
+          >
+            {analyzing ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Analyze Meal</Text>
+            )}
           </TouchableOpacity>
         </View>
+
+        {analysisId && (
+          <AIAnalysisSheet
+            visible={showAnalysisSheet}
+            photoUri={capturedImage}
+            mealType={mealType}
+            userNote={userNote}
+            analysisId={analysisId}
+            onClose={() => setShowAnalysisSheet(false)}
+            onSave={handleSaveFromAnalysis}
+          />
+        )}
       </View>
     );
   }
@@ -373,15 +510,60 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     backgroundColor: '#ffffff',
   },
-  previewContainer: {
+  reviewScroll: {
     flex: 1,
+  },
+  reviewContent: {
+    paddingBottom: 24,
+  },
+  previewContainer: {
+    height: 300,
     backgroundColor: '#000000',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginHorizontal: 24,
+    marginTop: 16,
   },
   preview: {
     width: '100%',
     height: '100%',
+  },
+  formSection: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    gap: 20,
+  },
+  sectionLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 8,
+  },
+  mealTypeChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  mealTypeChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  mealTypeChipActive: {
+    backgroundColor: '#d1fae5',
+    borderColor: '#10b981',
+  },
+  mealTypeChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  mealTypeChipTextActive: {
+    color: '#10b981',
+    fontWeight: '600',
   },
   actions: {
     flexDirection: 'row',
@@ -398,6 +580,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6,
   },
   primaryButtonText: {
     fontSize: 16,

@@ -4,8 +4,10 @@ import {
   VISION_PROMPT_TEMPLATE,
   buildPromptConfig,
 } from './prompts';
+import { supabase } from '@/lib/supabase';
 
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const MODEL_VERSION = 'gpt-4-vision-preview';
 
 export async function analyzePhotoWithVision(
@@ -16,70 +18,42 @@ export async function analyzePhotoWithVision(
   }
 
   try {
-    const base64Image = await convertImageToBase64(input.photoUri);
+    const functionUrl = `${SUPABASE_URL}/functions/v1/analyze-photo`;
 
-    const contextPrompt = buildPromptConfig(
-      input.userContext?.region,
-      input.userContext?.dietaryPrefs,
-      input.userContext?.recentFoods,
-      input.userContext?.auxText
-    );
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('User not authenticated');
+    }
 
-    const userPrompt = VISION_PROMPT_TEMPLATE(
-      input.mealType,
-      input.userContext?.region,
-      input.userContext?.dietaryPrefs,
-      input.userContext?.auxText
-    );
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${session.access_token}`,
+        'Apikey': SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
-        model: MODEL_VERSION,
-        messages: [
-          {
-            role: 'system',
-            content: SYSTEM_PROMPT + contextPrompt,
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: userPrompt,
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Image}`,
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 1000,
-        temperature: 0.3,
+        image_url: input.photoUri,
+        aux_text: input.userContext?.auxText,
+        user_id: session.user.id,
+        meal_type: input.mealType,
+        user_region: input.userContext?.region,
+        dietary_prefs: input.userContext?.dietaryPrefs,
       }),
     });
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(`OpenAI API error: ${error.error?.message || 'Unknown error'}`);
+      throw new Error(`Vision analysis error: ${error.message || 'Unknown error'}`);
     }
 
     const data = await response.json();
-    const content = data.choices[0]?.message?.content;
 
-    if (!content) {
-      throw new Error('No content in OpenAI response');
+    if (data.error) {
+      throw new Error(data.message || data.error);
     }
 
-    const parsedResult = parseAIResponse(content);
-    return formatAnalysisResponse(parsedResult, MODEL_VERSION);
+    return formatAnalysisResponse(data, MODEL_VERSION);
   } catch (error) {
     console.error('Vision analysis error:', error);
     return createFallbackResponse(error);
