@@ -21,6 +21,7 @@ RESPONSE JSON SCHEMA:
         "fat_g": number
       },
       "confidence": number (0.0 to 1.0 for identification confidence),
+      "note_influence": "none" | "name" | "portion" | "both" (how user note affected this item),
       "alternatives": [
         {
           "name": "string (alternative dish name)",
@@ -100,19 +101,24 @@ Output: {
 }
 `;
 
-export const VISION_PROMPT_TEMPLATE = (mealType?: string, region?: string, dietaryPrefs?: string[]) => `
+export const VISION_PROMPT_TEMPLATE = (mealType?: string, region?: string, dietaryPrefs?: string[], auxText?: string) => `
 Analyze this food image and identify all visible Indian food items.
 
 ${mealType ? `Meal Type: ${mealType}` : ''}
 ${region ? `Regional Context: ${region} cuisine - prioritize dishes from this region` : ''}
 ${dietaryPrefs && dietaryPrefs.length > 0 ? `Dietary Preferences: ${dietaryPrefs.join(', ')} - respect these preferences in identification` : ''}
+${auxText ? `
+USER NOTE (optional): "${auxText}"
+Use this note ONLY to disambiguate counts/portions/names present in the image. If the note specifies explicit numeric counts (e.g., "2 chapati", "3 idlis"), prefer those over vague visual estimates. However, NEVER invent items that are not visible in the image. If a conflict exists between the note and what you see, mark note_influence appropriately and explain in the response.` : ''}
 
 Instructions:
 1. Identify each distinct food item visible in the image
 2. Estimate portion sizes based on plate/bowl sizes and visual cues
 3. Use the portion heuristics provided in the system prompt
-4. Provide confidence scores and alternatives for uncertain items
-5. Return valid JSON only - no additional text
+4. If user note provides explicit counts, use those for portion_grams calculation
+5. Set note_influence field: "none" (no note or not used), "name" (helped identify dish), "portion" (refined quantity), "both" (name and portion)
+6. Provide confidence scores and alternatives for uncertain items
+7. Return valid JSON only - no additional text
 
 ${FEW_SHOT_EXAMPLES}
 `;
@@ -173,7 +179,8 @@ export const INDIAN_SYNONYM_MAP: Record<string, string> = {
 export function buildPromptConfig(
   region?: string,
   dietaryPrefs?: string[],
-  recentFoods?: string[]
+  recentFoods?: string[],
+  auxText?: string
 ): string {
   let contextAddons = '';
 
@@ -187,6 +194,10 @@ export function buildPromptConfig(
 
   if (recentFoods && recentFoods.length > 0) {
     contextAddons += `\nRecent User Foods: ${recentFoods.slice(0, 5).join(', ')}`;
+  }
+
+  if (auxText) {
+    contextAddons += `\nUser Context Note: "${auxText}"`;
   }
 
   return contextAddons;

@@ -7,22 +7,51 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Camera, FlipHorizontal, X, Check, ImageIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { ContextAssistBox } from './ContextAssistBox';
+import { useEffect } from 'react';
 
 interface CameraCaptureProps {
-  onPhotoCapture: (uri: string) => void;
+  onPhotoCapture: (uri: string, context?: CaptureContext) => void;
   onCancel: () => void;
 }
+
+interface CaptureContext {
+  userNote?: string;
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+}
+
 
 export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) {
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showContextInput, setShowContextInput] = useState(false);
+  const [userNote, setUserNote] = useState('');
+  const [selectedMealType, setSelectedMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
+  const [repeatSuggestions, setRepeatSuggestions] = useState<any[]>([]);
   const cameraRef = useRef<CameraView>(null);
+
+  useEffect(() => {
+    loadRepeatMeals();
+  }, []);
+
+  const loadRepeatMeals = async () => {
+    try {
+      const { getUserMealPatterns, buildRepeatMealSuggestions } = await import('@/lib/ai/personalizationService');
+      const patterns = await getUserMealPatterns(3);
+      const suggestions = buildRepeatMealSuggestions(patterns);
+      setRepeatSuggestions(suggestions);
+    } catch (error) {
+      console.error('Failed to load repeat meals:', error);
+    }
+  };
 
   if (!permission) {
     return (
@@ -89,7 +118,11 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
 
   const handleConfirm = () => {
     if (capturedPhoto) {
-      onPhotoCapture(capturedPhoto);
+      const context: CaptureContext = {
+        userNote: userNote.trim() || undefined,
+        mealType: selectedMealType,
+      };
+      onPhotoCapture(capturedPhoto, context);
     }
   };
 
@@ -104,7 +137,46 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
   if (capturedPhoto) {
     return (
       <View style={styles.container}>
-        <Image source={{ uri: capturedPhoto }} style={styles.preview} />
+        <ScrollView style={styles.previewContainer} contentContainerStyle={styles.previewContent}>
+          <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
+
+          <View style={styles.contextSection}>
+            <View style={styles.mealTypeSelector}>
+              <Text style={styles.mealTypeLabel}>Meal Type</Text>
+              <View style={styles.mealTypeChips}>
+                {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.mealTypeChip,
+                      selectedMealType === type && styles.mealTypeChipActive,
+                    ]}
+                    onPress={() => setSelectedMealType(type)}
+                  >
+                    <Text
+                      style={[
+                        styles.mealTypeText,
+                        selectedMealType === type && styles.mealTypeTextActive,
+                      ]}
+                    >
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <ContextAssistBox
+              value={userNote}
+              onChange={setUserNote}
+              maxLength={140}
+              placeholder="e.g., 2 chapati + dal, 3 idlis with sambar"
+              langHint="Hindi/English supported (e.g., 2 रोटी, 1 कटोरी dal)"
+              repeatMealSuggestions={repeatSuggestions}
+            />
+          </View>
+        </ScrollView>
+
         <View style={styles.previewControls}>
           <TouchableOpacity style={styles.previewButton} onPress={handleRetake}>
             <X size={24} color="#ffffff" />
@@ -115,7 +187,7 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
             onPress={handleConfirm}
           >
             <Check size={24} color="#ffffff" />
-            <Text style={styles.previewButtonText}>Use Photo</Text>
+            <Text style={styles.previewButtonText}>Analyze</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -276,9 +348,53 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  preview: {
+  previewContainer: {
     flex: 1,
-    resizeMode: 'contain',
+    backgroundColor: '#ffffff',
+  },
+  previewContent: {
+    paddingBottom: 140,
+  },
+  previewImage: {
+    width: '100%',
+    height: 400,
+    resizeMode: 'cover',
+  },
+  contextSection: {
+    padding: 20,
+    gap: 20,
+  },
+  mealTypeSelector: {
+    gap: 10,
+  },
+  mealTypeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  mealTypeChips: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  mealTypeChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  mealTypeChipActive: {
+    backgroundColor: '#d1fae5',
+    borderColor: '#10b981',
+  },
+  mealTypeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  mealTypeTextActive: {
+    color: '#059669',
   },
   previewControls: {
     position: 'absolute',

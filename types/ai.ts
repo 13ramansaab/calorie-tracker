@@ -7,6 +7,7 @@ export interface DetectedFood {
   carbs: number;
   fat: number;
   confidence: number;
+  noteInfluence?: 'none' | 'name' | 'portion' | 'both';
 }
 
 export interface AnalysisResponse {
@@ -30,6 +31,7 @@ export interface AnalysisInput {
     region?: string;
     dietaryPrefs?: string[];
     recentFoods?: string[];
+    auxText?: string;
   };
 }
 
@@ -56,4 +58,17 @@ export interface PromptConfig {
   dietaryContext?: string;
   portionPriors?: Record<string, number>;
   synonymMap?: Record<string, string>;
+}
+
+export interface ConflictDetection {
+  itemName: string;
+  modelValue: string | number;
+  noteValue: string | number;
+  conflictType: 'quantity' | 'portion' | 'name';
+}
+
+export interface AnalysisEvent {
+  eventType: 'note_entered' | 'note_used_in_analysis' | 'note_conflict_shown' | 'conflict_choice_selected';
+  eventData: Record<string, any>;
+  timestamp: string;
 }
