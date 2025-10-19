@@ -16,6 +16,7 @@ import { NumberInput } from './FormInput';
 import { Chips } from './Chips';
 import { ContextBanner } from './ContextBanner';
 import { ConflictChipGroup } from './ConflictChipGroup';
+import { InlineHint } from './InlineHint';
 import { AnalysisResponse, DetectedFood, ConflictDetection } from '@/types/ai';
 import { analyzePhotoWithVision } from '@/lib/ai/visionService';
 import { detectConflicts, resolveConflict } from '@/lib/ai/conflictDetection';
@@ -25,6 +26,13 @@ import {
   logNoteConflictShown,
   logConflictChoiceSelected,
 } from '@/lib/ai/instrumentation';
+import {
+  getUserPortionPriors,
+  applyUserPriors,
+  generateInlineHint,
+  trackMealSave,
+} from '@/lib/ai/personalizationService';
+import { loadSynonyms, normalizeUserNote } from '@/lib/ai/multilingualService';
 import { mapDetectedFoodToDatabase } from '@/lib/ai/mappingService';
 import {
   calculateOverallConfidence,
@@ -62,12 +70,20 @@ export function AIAnalysisSheet({
   const [editingContext, setEditingContext] = useState(false);
   const [conflicts, setConflicts] = useState<ConflictDetection[]>([]);
   const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const [userPriors, setUserPriors] = useState<Record<string, number>>({});
+  const [inlineHints, setInlineHints] = useState<Record<number, any>>({});
 
   useEffect(() => {
     if (visible && photoUri && !analysis) {
+      loadUserPreferences();
       analyzePhoto();
     }
   }, [visible, photoUri]);
+
+  const loadUserPreferences = async () => {
+    const priors = await getUserPortionPriors();
+    setUserPriors(priors);
+  };
 
   const analyzePhoto = async () => {
     if (!photoUri || !user) return;
@@ -75,6 +91,9 @@ export function AIAnalysisSheet({
     setAnalyzing(true);
 
     try {
+      const synonyms = await loadSynonyms();
+      const normalizedNote = userNote ? normalizeUserNote(userNote, synonyms) : undefined;
+
       const result = await analyzePhotoWithVision({
         type: 'photo',
         photoUri,
@@ -82,7 +101,7 @@ export function AIAnalysisSheet({
         userContext: {
           region: profile?.region,
           dietaryPrefs: profile?.dietary_preferences,
-          auxText: userNote,
+          auxText: normalizedNote,
         },
       });
 
@@ -116,20 +135,37 @@ export function AIAnalysisSheet({
             !!profile?.region
           );
 
+          const adjustedPortion = applyUserPriors(
+            mapped.portion,
+            mapped.name,
+            userPriors
+          );
+
+          const ratio = adjustedPortion / mapped.portion;
+
           return {
             ...food,
             name: mapped.name,
-            portion: mapped.portion,
-            calories: mapped.calories,
-            protein: mapped.protein,
-            carbs: mapped.carbs,
-            fat: mapped.fat,
+            portion: adjustedPortion,
+            calories: Math.round(mapped.calories * ratio),
+            protein: Math.round(mapped.protein * ratio * 10) / 10,
+            carbs: Math.round(mapped.carbs * ratio * 10) / 10,
+            fat: Math.round(mapped.fat * ratio * 10) / 10,
             confidence: overallConfidence,
           };
         })
       );
 
       setFoods(mappedFoods);
+
+      const hints: Record<number, any> = {};
+      mappedFoods.forEach((food, index) => {
+        const hint = generateInlineHint(food.name, food.confidence);
+        if (hint) {
+          hints[index] = hint;
+        }
+      });
+      setInlineHints(hints);
 
       const itemsInfluenced = mappedFoods.filter(
         (f) => f.noteInfluence && f.noteInfluence !== 'none'
@@ -214,11 +250,15 @@ export function AIAnalysisSheet({
     setFoods(foods.filter((_, i) => i !== index));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (foods.length === 0) {
       Alert.alert('No Items', 'Please add at least one food item');
       return;
     }
+
+    await trackMealSave(
+      foods.map((f) => ({ name: f.name, portion: f.portion }))
+    );
 
     onSave(foods, selectedMealType, photoUri);
   };
@@ -323,6 +363,34 @@ export function AIAnalysisSheet({
                                 foodConflict.conflictType
                               );
                             }
+                          }}
+                        />
+                      )}
+
+                      {inlineHints[index] && (
+                        <InlineHint
+                          itemName={food.name}
+                          question={inlineHints[index].question}
+                          options={inlineHints[index].options}
+                          onAnswer={(value) => {
+                            const unitWeight = value < 10 ? 30 : 1;
+                            const newPortion = value * unitWeight;
+                            const ratio = newPortion / food.portion;
+
+                            const updatedFoods = [...foods];
+                            updatedFoods[index] = {
+                              ...food,
+                              portion: newPortion,
+                              calories: Math.round(food.calories * ratio),
+                              protein: Math.round(food.protein * ratio * 10) / 10,
+                              carbs: Math.round(food.carbs * ratio * 10) / 10,
+                              fat: Math.round(food.fat * ratio * 10) / 10,
+                            };
+                            setFoods(updatedFoods);
+
+                            const newHints = { ...inlineHints };
+                            delete newHints[index];
+                            setInlineHints(newHints);
                           }}
                         />
                       )}

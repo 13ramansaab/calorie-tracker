@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { MessageSquare, RotateCw } from 'lucide-react-native';
+import { MessageSquare, RotateCw, Zap, Clock } from 'lucide-react-native';
 
 interface ContextAssistBoxProps {
   value: string;
@@ -16,6 +16,11 @@ interface ContextAssistBoxProps {
   placeholder?: string;
   examples?: string[];
   langHint?: string;
+  repeatMealSuggestions?: Array<{
+    label: string;
+    items: string[];
+    frequency: number;
+  }>;
 }
 
 const DEFAULT_EXAMPLES = [
@@ -35,6 +40,7 @@ export function ContextAssistBox({
   placeholder = 'e.g., 2 chapati + dal, 3 idlis with sambar',
   examples = DEFAULT_EXAMPLES,
   langHint,
+  repeatMealSuggestions = [],
 }: ContextAssistBoxProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
@@ -70,6 +76,38 @@ export function ContextAssistBox({
         <View style={styles.rotatingHintContainer}>
           <RotateCw size={14} color="#9ca3af" />
           <Text style={styles.rotatingHint}>{rotatingExample}</Text>
+        </View>
+      )}
+
+      {repeatMealSuggestions.length > 0 && (
+        <View style={styles.repeatSuggestionsSection}>
+          <View style={styles.repeatHeader}>
+            <Clock size={14} color="#10b981" />
+            <Text style={styles.repeatTitle}>Repeat Meals</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.repeatScroll}
+          >
+            {repeatMealSuggestions.map((suggestion, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.repeatChip}
+                onPress={() => {
+                  onChange(suggestion.items.join(' + '));
+                  setShowExamples(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Zap size={12} color="#059669" />
+                <Text style={styles.repeatLabel}>{suggestion.label}</Text>
+                <View style={styles.frequencyBadge}>
+                  <Text style={styles.frequencyText}>{suggestion.frequency}x</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -152,6 +190,12 @@ export function ContextAssistBox({
       <View style={styles.infoBox}>
         <Text style={styles.infoText}>
           💡 Include quantities (e.g., "2 rotis", "1 cup", "small bowl") for better portion estimates
+          {langHint && (
+            <Text style={styles.langHintText}>
+              {' '}
+              • {langHint}
+            </Text>
+          )}
         </Text>
       </View>
     </View>
@@ -305,5 +349,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#1e40af',
     lineHeight: 16,
+  },
+  langHintText: {
+    fontSize: 11,
+    color: '#6b7280',
+    fontStyle: 'italic',
+  },
+  repeatSuggestionsSection: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  repeatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  repeatTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  repeatScroll: {
+    marginHorizontal: -4,
+  },
+  repeatChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: '#d1fae5',
+    borderWidth: 1,
+    borderColor: '#86efac',
+    marginRight: 8,
+  },
+  repeatLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  frequencyBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    backgroundColor: '#10b981',
+  },
+  frequencyText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });

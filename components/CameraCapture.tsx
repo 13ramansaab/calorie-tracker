@@ -14,6 +14,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { Camera, FlipHorizontal, X, Check, ImageIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ContextAssistBox } from './ContextAssistBox';
+import { useEffect } from 'react';
 
 interface CameraCaptureProps {
   onPhotoCapture: (uri: string, context?: CaptureContext) => void;
@@ -34,7 +35,23 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
   const [showContextInput, setShowContextInput] = useState(false);
   const [userNote, setUserNote] = useState('');
   const [selectedMealType, setSelectedMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
+  const [repeatSuggestions, setRepeatSuggestions] = useState<any[]>([]);
   const cameraRef = useRef<CameraView>(null);
+
+  useEffect(() => {
+    loadRepeatMeals();
+  }, []);
+
+  const loadRepeatMeals = async () => {
+    try {
+      const { getUserMealPatterns, buildRepeatMealSuggestions } = await import('@/lib/ai/personalizationService');
+      const patterns = await getUserMealPatterns(3);
+      const suggestions = buildRepeatMealSuggestions(patterns);
+      setRepeatSuggestions(suggestions);
+    } catch (error) {
+      console.error('Failed to load repeat meals:', error);
+    }
+  };
 
   if (!permission) {
     return (
@@ -154,6 +171,8 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
               onChange={setUserNote}
               maxLength={140}
               placeholder="e.g., 2 chapati + dal, 3 idlis with sambar"
+              langHint="Hindi/English supported (e.g., 2 रोटी, 1 कटोरी dal)"
+              repeatMealSuggestions={repeatSuggestions}
             />
           </View>
         </ScrollView>
