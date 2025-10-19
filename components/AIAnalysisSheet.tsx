@@ -17,6 +17,7 @@ import { Chips } from './Chips';
 import { ContextBanner } from './ContextBanner';
 import { ConflictChipGroup } from './ConflictChipGroup';
 import { InlineHint } from './InlineHint';
+import { FoodSearchModal } from './FoodSearchModal';
 import { AnalysisResponse, DetectedFood, ConflictDetection } from '@/types/ai';
 import { analyzePhotoWithVision } from '@/lib/ai/visionService';
 import { detectConflicts, resolveConflict } from '@/lib/ai/conflictDetection';
@@ -47,6 +48,7 @@ interface AIAnalysisSheetProps {
   photoUri?: string;
   mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   userNote?: string;
+  analysisId?: string;
   onClose: () => void;
   onSave: (items: DetectedFood[], mealType: string, photoUri?: string) => void;
 }
@@ -56,6 +58,7 @@ export function AIAnalysisSheet({
   photoUri,
   mealType = 'lunch',
   userNote,
+  analysisId: propAnalysisId,
   onClose,
   onSave,
 }: AIAnalysisSheetProps) {
@@ -72,13 +75,17 @@ export function AIAnalysisSheet({
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [userPriors, setUserPriors] = useState<Record<string, number>>({});
   const [inlineHints, setInlineHints] = useState<Record<number, any>>({});
+  const [showFoodSearch, setShowFoodSearch] = useState(false);
 
   useEffect(() => {
     if (visible && photoUri && !analysis) {
       loadUserPreferences();
+      if (propAnalysisId) {
+        setAnalysisId(propAnalysisId);
+      }
       analyzePhoto();
     }
-  }, [visible, photoUri]);
+  }, [visible, photoUri, propAnalysisId]);
 
   const loadUserPreferences = async () => {
     const priors = await getUserPortionPriors();
@@ -248,6 +255,11 @@ export function AIAnalysisSheet({
 
   const handleRemoveFood = (index: number) => {
     setFoods(foods.filter((_, i) => i !== index));
+  };
+
+  const handleAddFoodFromSearch = (food: DetectedFood) => {
+    setFoods([...foods, food]);
+    setShowFoodSearch(false);
   };
 
   const handleSave = async () => {
@@ -443,7 +455,10 @@ export function AIAnalysisSheet({
                 </View>
               )}
 
-              <TouchableOpacity style={styles.addButton}>
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => setShowFoodSearch(true)}
+              >
                 <Plus size={20} color="#10b981" />
                 <Text style={styles.addButtonText}>Add Another Item</Text>
               </TouchableOpacity>
@@ -463,6 +478,12 @@ export function AIAnalysisSheet({
             <Text style={styles.primaryButtonText}>Save Meal</Text>
           </TouchableOpacity>
         </View>
+
+        <FoodSearchModal
+          visible={showFoodSearch}
+          onClose={() => setShowFoodSearch(false)}
+          onSelect={handleAddFoodFromSearch}
+        />
       </View>
     </Modal>
   );
