@@ -8,6 +8,7 @@ export interface DetectedFood {
   fat: number;
   confidence: number;
   noteInfluence?: 'none' | 'name' | 'portion' | 'both';
+  foodId?: string;
 }
 
 export interface AnalysisResponse {

@@ -55,6 +55,9 @@ export default function MealDetail() {
     if (!user || !id) return;
 
     try {
+      console.log('Fetching meal details for ID:', id);
+      console.log('User ID:', user.id);
+
       const { data: mealData, error: mealError } = await supabase
         .from('meal_logs')
         .select('*')
@@ -62,15 +65,24 @@ export default function MealDetail() {
         .eq('user_id', user.id)
         .single();
 
-      if (mealError) throw mealError;
+      if (mealError) {
+        console.error('Meal fetch error:', mealError);
+        throw mealError;
+      }
+      console.log('Meal data:', mealData);
       setMeal(mealData);
 
+      console.log('Fetching meal items for meal_log_id:', id);
       const { data: itemsData, error: itemsError } = await supabase
         .from('meal_log_items')
         .select('*')
         .eq('meal_log_id', id);
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error('Items fetch error:', itemsError);
+        throw itemsError;
+      }
+      console.log('Items data:', itemsData);
       setItems(itemsData || []);
     } catch (error) {
       console.error('Error fetching meal:', error);

@@ -70,6 +70,20 @@ export function logConflictChoiceSelected(
   });
 }
 
+export async function logEvent(
+  userId: string,
+  eventType: string,
+  eventData: Record<string, any> = {}
+): Promise<void> {
+  try {
+    // Import the monitoring function dynamically to avoid circular imports
+    const { logAnalysisEvent: logMonitoringEvent } = await import('./monitoring');
+    await logMonitoringEvent(userId, eventType as any, eventData);
+  } catch (error) {
+    console.error('Error logging event:', error);
+  }
+}
+
 export async function getEventStats(
   startDate?: Date,
   endDate?: Date

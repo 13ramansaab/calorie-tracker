@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { analyzePhotoWithVision } from './visionService';
-import { analyzeTextOnly } from './textService';
+import { analyzeTextDescription } from './textService';
 import { mapDetectedFoodToDatabase } from './mappingService';
 import { loadSynonyms, normalizeUserNote } from './multilingualService';
 import { detectContradictoryNote, validateNoteLength, sanitizeNoteForStorage } from './edgeCasePolicies';
@@ -9,14 +9,14 @@ import { applyUserPriors, getUserPortionPriors } from './personalizationService'
 import { logEvent } from './instrumentation';
 import { optimizeImageForAnalysis } from './imageOptimization';
 import { retryWithBackoff, retryOnBadJson } from './retryLogic';
-import { shouldUseCachedAnalysis, saveCachedAnalysis } from './analysisCache';
+import { shouldUseCachedAnalysis, saveCachedAnalysis, computeImageHash } from './analysisCache';
 import { logAnalysisEvent } from './monitoring';
 import { DetectedFood, AnalysisResponse } from '@/types/ai';
 
 export interface AnalysisOptions {
   photoUri?: string;
   userNote?: string;
-  mealType?: string;
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   userId: string;
   userRegion?: string;
   dietaryPrefs?: string[];
@@ -48,7 +48,7 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
   let noteConflict = false;
   let wasCached = false;
 
-  await logAnalysisEvent(userId, 'ai_analysis_started', {
+  await logEvent(userId, 'ai_analysis_started', {
     latency_ms: 0,
     note_used: !!userNote,
   });
@@ -77,11 +77,11 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
     wasCached = true;
     const latencyMs = Date.now() - startTime;
 
-    await logAnalysisEvent(userId, 'cache_hit', {
+    await logEvent(userId, 'cache_hit', {
       latency_ms: latencyMs,
     });
 
-    await logAnalysisEvent(userId, 'ai_analysis_completed', {
+    await logEvent(userId, 'ai_analysis_completed', {
       latency_ms: latencyMs,
       was_cached: true,
     });
@@ -112,7 +112,9 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
       retryWithBackoff(
         () =>
           analyzePhotoWithVision({
+            type: 'photo',
             photoUri: optimizedImage.uri,
+            mealType,
             userContext: {
               region: userRegion,
               dietaryPrefs,
@@ -125,26 +127,34 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
     2
   );
 
+  // 🔥 FIXED: Complete DetectedFood objects with ALL required fields
   const mappedFoods = await Promise.all(
-    analysisResponse.items.map(async (item) => {
-      const mapped = await mapDetectedFoodToDatabase(item.name, userRegion);
+    analysisResponse.foods.map(async (food) => {
+      const mapped = await mapDetectedFoodToDatabase(food, userRegion);
       return {
-        ...item,
-        foodId: mapped?.id,
-        name: mapped?.name || item.name,
-        calories: mapped?.calories || item.calories,
-        protein: mapped?.protein || item.protein,
-        carbs: mapped?.carbs || item.carbs,
-        fat: mapped?.fat || item.fat,
+        ...food,
+        noteInfluence: 'none' as const,  // 🔥 REQUIRED BY mappingService
+        unit: food.unit || 'g',  // 🔥 REQUIRED
+        foodId: mapped?.foodItemId,
+        name: mapped?.name || food.name || 'Unknown Food',
+        calories: mapped?.calories || food.calories || 0,
+        protein: mapped?.protein || food.protein || 0,
+        carbs: mapped?.carbs || food.carbs || 0,
+        fat: mapped?.fat || food.fat || 0,
+        portion: mapped?.portion || food.portion || 100,
+        confidence: food.confidence || 50,
       };
     })
   );
 
-  const userPriors = await getUserPortionPriors(userId);
+  const userPriors = await getUserPortionPriors();
 
   let adjustedFoods = mappedFoods.map((food) => {
-    const priorResult = applyUserPriors(food, userPriors);
-    return priorResult.adjusted ? priorResult.food : food;
+    const adjustedPortion = applyUserPriors(food.portion, food.name, userPriors);
+    return {
+      ...food,
+      portion: adjustedPortion,
+    };
   });
 
   if (sanitizedNote) {
@@ -194,43 +204,71 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
 
   const latencyMs = Date.now() - startTime;
 
+  console.log('Attempting to save analysis to database...');
+  console.log('User ID:', userId);
+  console.log('Photo URL:', optimizedImage.uri);
+  console.log('Adjusted foods:', adjustedFoods);
+
+  // Check if user exists in profiles table
+  const { data: userProfile, error: userError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (userError || !userProfile) {
+    console.error('User not found in profiles table:', userError);
+    throw new Error(`User ${userId} not found in profiles table`);
+  }
+
+  console.log('User profile found:', userProfile);
+
+  // First, let's try a simple insert to test the table
+  const insertData = {
+    user_id: userId,
+    image_url: optimizedImage.uri, // Use image_url instead of photo_url
+    photo_url: optimizedImage.uri, // Keep both for compatibility
+    model_version: 'gpt-4-vision-preview',
+    user_note: sanitizedNote || null,
+    note_used: !!sanitizedNote,
+    note_conflict: noteConflict,
+    note_influence_summary: sanitizedNote
+      ? `Note provided: "${sanitizedNote}". Used for portion refinement.`
+      : null,
+    raw_response: analysisResponse,
+    parsed_output: {
+      items: adjustedFoods,
+      total_calories: totalCalories,
+      meal_type: mealType,
+    },
+    overall_confidence: avgConfidence,
+    latency_ms: latencyMs,
+    status: 'analyzed', // Use 'analyzed' instead of 'completed' to match the check constraint
+  };
+
+  console.log('Insert data:', JSON.stringify(insertData, null, 2));
+
   const { data: photoAnalysis, error: insertError } = await supabase
     .from('photo_analyses')
-    .insert({
-      user_id: userId,
-      photo_url: optimizedImage.uri,
-      model_version: 'gpt-4-vision-preview',
-      user_note: sanitizedNote || null,
-      note_used: !!sanitizedNote,
-      note_conflict: noteConflict,
-      note_influence_summary: sanitizedNote
-        ? `Note provided: "${sanitizedNote}". Used for portion refinement.`
-        : null,
-      raw_response: analysisResponse,
-      parsed_output: {
-        items: adjustedFoods,
-        total_calories: totalCalories,
-        meal_type: mealType,
-      },
-      overall_confidence: avgConfidence,
-      latency_ms: latencyMs,
-      status: 'completed',
-    })
+    .insert(insertData)
     .select()
     .single();
 
   if (insertError || !photoAnalysis) {
-    await logAnalysisEvent(userId, 'ai_analysis_failed', {
+    console.error('Database insert error:', insertError);
+    console.error('Photo analysis data:', photoAnalysis);
+    await logEvent(userId, 'ai_analysis_failed', {
       latency_ms: latencyMs,
       error_type: 'database_error',
       error_message: insertError?.message || 'Unknown error',
+      error_details: insertError,
     });
-    throw new Error('Failed to save analysis to database');
+    throw new Error(`Failed to save analysis to database: ${insertError?.message || 'Unknown error'}`);
   }
 
-  await saveCachedAnalysis(userId, await import('./analysisCache').then(m => m.computeImageHash(photoUri)), photoAnalysis.id);
+  await saveCachedAnalysis(userId, await computeImageHash(photoUri), photoAnalysis.id);
 
-  await logAnalysisEvent(userId, 'ai_analysis_completed', {
+  await logEvent(userId, 'ai_analysis_completed', {
     latency_ms: latencyMs,
     confidence_avg: avgConfidence,
     items_count: adjustedFoods.length,
@@ -275,29 +313,37 @@ export async function runTextOnlyAnalysis(options: AnalysisOptions): Promise<Ana
   const normalizedNote = normalizeUserNote(sanitizedNote, synonyms);
   const cleanNote = sanitizeNoteForStorage(normalizedNote);
 
-  const analysisResponse = await analyzeTextOnly(cleanNote, {
-    region: userRegion,
-    dietaryPrefs,
+  const analysisResponse = await analyzeTextDescription({
+    type: 'text',
+    text: cleanNote,
+    mealType,
+    userContext: {
+      region: userRegion,
+      dietaryPrefs,
+    },
   });
 
   const mappedFoods = await Promise.all(
-    analysisResponse.items.map(async (item) => {
-      const mapped = await mapDetectedFoodToDatabase(item.name, userRegion);
+    analysisResponse.foods.map(async (item: DetectedFood) => {
+      const mapped = await mapDetectedFoodToDatabase(item, userRegion);
       return {
         ...item,
-        foodId: mapped?.id,
+        noteInfluence: 'none' as const,
+        unit: item.unit || 'g',
+        foodId: mapped?.foodItemId,
         name: mapped?.name || item.name,
         calories: mapped?.calories || item.calories,
         protein: mapped?.protein || item.protein,
         carbs: mapped?.carbs || item.carbs,
         fat: mapped?.fat || item.fat,
+        portion: mapped?.portion || item.portion,
       };
     })
   );
 
-  const totalCalories = mappedFoods.reduce((sum, food) => sum + food.calories, 0);
+  const totalCalories = mappedFoods.reduce((sum: number, food: DetectedFood) => sum + food.calories, 0);
   const avgConfidence =
-    mappedFoods.reduce((sum, food) => sum + food.confidence, 0) / mappedFoods.length;
+    mappedFoods.reduce((sum: number, food: DetectedFood) => sum + food.confidence, 0) / mappedFoods.length;
 
   const { data: photoAnalysis, error: insertError } = await supabase
     .from('photo_analyses')
@@ -354,6 +400,20 @@ export async function saveMealFromAnalysis(
     .eq('id', analysisId)
     .single();
 
+  console.log('Attempting to save meal log...');
+  console.log('Meal log data:', {
+    user_id: userId,
+    meal_type: mealType,
+    logged_at: timestamp.toISOString(),
+    source: analysis?.photo_url ? 'photo' : 'text',
+    photo_analysis_id: analysisId,
+    context_note: analysis?.user_note || null,
+    total_calories: totalCalories,
+    total_protein: totalProtein,
+    total_carbs: totalCarbs,
+    total_fat: totalFat,
+  });
+
   const { data: mealLog, error: mealError } = await supabase
     .from('meal_logs')
     .insert({
@@ -364,33 +424,52 @@ export async function saveMealFromAnalysis(
       photo_analysis_id: analysisId,
       context_note: analysis?.user_note || null,
       total_calories: totalCalories,
-      protein_grams: totalProtein,
-      carbs_grams: totalCarbs,
-      fat_grams: totalFat,
+      total_protein: totalProtein,
+      total_carbs: totalCarbs,
+      total_fat: totalFat,
     })
     .select()
     .single();
 
   if (mealError || !mealLog) {
+    console.error('Meal log insert error:', mealError);
+    console.error('Meal log data:', mealLog);
     throw new Error('Failed to save meal log');
   }
 
+  console.log('Meal log saved successfully:', mealLog);
+
+  console.log('Original editedFoods data:', JSON.stringify(editedFoods, null, 2));
+  
   const mealItems = editedFoods.map((food) => ({
     meal_log_id: mealLog.id,
-    food_id: food.foodId || null,
+    food_item_id: food.foodId || null,
     food_name: food.name,
-    portion_grams: food.portion,
-    calories: food.calories,
-    protein_grams: food.protein,
-    carbs_grams: food.carbs,
-    fat_grams: food.fat,
-    confidence: food.confidence,
+    portion_grams: Math.max(Number(food.portion) || 100, 1), // Ensure minimum 1g
+    calories: Math.max(Number(food.calories) || 0, 0),
+    protein_grams: Math.max(Number(food.protein) || 0, 0),
+    carbs_grams: Math.max(Number(food.carbs) || 0, 0),
+    fat_grams: Math.max(Number(food.fat) || 0, 0),
+    // Temporarily remove these fields to test
+    // confidence_score: food.confidence / 100,
+    // name_snapshot: food.name,
   }));
 
-  const { error: itemsError } = await supabase.from('meal_items').insert(mealItems);
+  console.log('Attempting to save meal items...');
+  console.log('Meal items data:', JSON.stringify(mealItems, null, 2));
+  console.log('Number of items:', mealItems.length);
+  console.log('First item sample:', mealItems[0]);
+
+  const { error: itemsError } = await supabase.from('meal_log_items').insert(mealItems);
 
   if (itemsError) {
-    throw new Error('Failed to save meal items');
+    console.error('Meal items insert error:', itemsError);
+    console.error('Error code:', itemsError.code);
+    console.error('Error message:', itemsError.message);
+    console.error('Error details:', itemsError.details);
+    console.error('Error hint:', itemsError.hint);
+    console.error('Meal items data that failed:', mealItems);
+    throw new Error(`Failed to save meal items: ${itemsError.message}`);
   }
 
   await supabase

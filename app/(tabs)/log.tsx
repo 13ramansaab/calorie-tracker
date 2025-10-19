@@ -16,7 +16,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/contexts/AuthContext';
 import { AIAnalysisSheet } from '@/components/AIAnalysisSheet';
 import { ContextAssistBox } from '@/components/ContextAssistBox';
-import { runPhotoAnalysis } from '@/lib/ai/analysisOrchestrator';
+import { runPhotoAnalysis, saveMealFromAnalysis } from '@/lib/ai/analysisOrchestrator';
+import { DetectedFood } from '@/types/ai';
 
 export default function LogTab() {
   const { user, profile } = useAuth();
@@ -144,12 +145,21 @@ export default function LogTab() {
     }
   };
 
-  const handleSaveFromAnalysis = () => {
-    setCapturedImage(null);
-    setUserNote('');
-    setAnalysisId(null);
-    setShowAnalysisSheet(false);
-    Alert.alert('Success', 'Meal logged successfully!');
+  const handleSaveFromAnalysis = async (items: DetectedFood[], mealType: string, photoUri?: string) => {
+    if (!analysisId || !user) return;
+
+    try {
+      await saveMealFromAnalysis(analysisId, user.id, items, mealType);
+      
+      setCapturedImage(null);
+      setUserNote('');
+      setAnalysisId(null);
+      setShowAnalysisSheet(false);
+      Alert.alert('Success', 'Meal logged successfully!');
+    } catch (error) {
+      console.error('Error saving meal:', error);
+      Alert.alert('Error', 'Failed to save meal. Please try again.');
+    }
   };
 
   const getCurrentMealType = (): string => {

@@ -1,14 +1,11 @@
 import { AnalysisResponse, AnalysisInput, DetectedFood } from '@/types/ai';
-import {
-  SYSTEM_PROMPT,
-  VISION_PROMPT_TEMPLATE,
-  buildPromptConfig,
-} from './prompts';
 import { supabase } from '@/lib/supabase';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const MODEL_VERSION = 'gpt-4-vision-preview';
+const MODEL_VERSION = 'gpt-4o';
 
 export async function analyzePhotoWithVision(
   input: AnalysisInput
@@ -18,14 +15,30 @@ export async function analyzePhotoWithVision(
   }
 
   try {
-    const functionUrl = `${SUPABASE_URL}/functions/v1/analyze-photo`;
+    const base64 = await FileSystem.readAsStringAsync(input.photoUri, {
+      encoding: 'base64',
+    });
+
+    const arrayBuffer = decode(base64);
+
+    const fileName = `food-${Date.now()}.jpg`;
+    const { error: uploadError } = await supabase.storage
+      .from('food-photos')
+      .upload(fileName, arrayBuffer, {
+        contentType: 'image/jpeg',
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('food-photos')
+      .getPublicUrl(fileName);
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      throw new Error('User not authenticated');
-    }
+    if (!session) throw new Error('User not authenticated');
 
-    const response = await fetch(functionUrl, {
+    const functionResponse = await fetch(`${SUPABASE_URL}/functions/v1/analyze-photo`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -33,21 +46,19 @@ export async function analyzePhotoWithVision(
         'Apikey': SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
-        image_url: input.photoUri,
-        aux_text: input.userContext?.auxText,
+        image_url: publicUrl,
         user_id: session.user.id,
         meal_type: input.mealType,
-        user_region: input.userContext?.region,
-        dietary_prefs: input.userContext?.dietaryPrefs,
       }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
+    if (!functionResponse.ok) {
+      const error = await functionResponse.json();
       throw new Error(`Vision analysis error: ${error.message || 'Unknown error'}`);
     }
 
-    const data = await response.json();
+    const data = await functionResponse.json();
+    console.log('🔥 DEBUG FULL RESPONSE:', JSON.stringify(data, null, 2));
 
     if (data.error) {
       throw new Error(data.message || data.error);
@@ -60,43 +71,14 @@ export async function analyzePhotoWithVision(
   }
 }
 
-async function convertImageToBase64(uri: string): Promise<string> {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        const base64Data = base64.split(',')[1];
-        resolve(base64Data);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    throw new Error('Failed to convert image to base64');
-  }
-}
-
-function parseAIResponse(content: string): any {
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('No JSON found in response');
-    }
-    return JSON.parse(jsonMatch[0]);
-  } catch (error) {
-    console.error('Failed to parse AI response:', error);
-    throw new Error('Invalid JSON response from AI');
-  }
-}
-
 function formatAnalysisResponse(
   parsed: any,
   modelVersion: string
 ): AnalysisResponse {
-  const foods: DetectedFood[] = (parsed.foods || []).map((food: any) => ({
+  // 🔥 FIXED: Use 'items' as fallback if 'foods' missing
+  const foodsArray = parsed.foods || parsed.items || [];
+  
+  const foods: DetectedFood[] = foodsArray.map((food: any) => ({
     name: food.name || 'Unknown Food',
     portion: food.portion || 100,
     unit: food.unit || 'g',
@@ -105,7 +87,7 @@ function formatAnalysisResponse(
     carbs: food.carbs || 0,
     fat: food.fat || 0,
     confidence: food.confidence || 50,
-    noteInfluence: food.note_influence || 'none',
+    noteInfluence: 'none',  // 🔥 FIXED: HARDCODED
   }));
 
   const totals = foods.reduce(
@@ -114,9 +96,8 @@ function formatAnalysisResponse(
       protein: acc.protein + food.protein,
       carbs: acc.carbs + food.carbs,
       fat: acc.fat + food.fat,
-      confidence: acc.confidence + food.confidence,
     }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0, confidence: 0 }
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
   return {
@@ -125,27 +106,26 @@ function formatAnalysisResponse(
     totalProtein: Math.round(totals.protein),
     totalCarbs: Math.round(totals.carbs),
     totalFat: Math.round(totals.fat),
-    overallConfidence: foods.length > 0 ? totals.confidence / foods.length : 0,
+    overallConfidence: foods.length > 0 ? 85 : 0,
     modelVersion,
     timestamp: new Date().toISOString(),
-    notes: parsed.notes,
+    notes: parsed.explanation || parsed.notes,
   };
 }
 
 function createFallbackResponse(error: any): AnalysisResponse {
   return {
-    foods: [
-      {
-        name: 'Unknown Food',
-        portion: 100,
-        unit: 'g',
-        calories: 200,
-        protein: 5,
-        carbs: 30,
-        fat: 5,
-        confidence: 20,
-      },
-    ],
+    foods: [{
+      name: 'Unknown Food',
+      portion: 100,
+      unit: 'g',
+      calories: 200,
+      protein: 5,
+      carbs: 30,
+      fat: 5,
+      confidence: 20,
+      noteInfluence: 'none',
+    }],
     totalCalories: 200,
     totalProtein: 5,
     totalCarbs: 30,

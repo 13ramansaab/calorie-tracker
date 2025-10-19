@@ -128,6 +128,10 @@ export function applyUserPriors(
   foodName: string,
   userPriors: Record<string, number>
 ): number {
+  if (!foodName || typeof foodName !== 'string') {
+    return detectedPortion;
+  }
+  
   const userPrior = userPriors[foodName.toLowerCase()];
 
   if (!userPrior) {

@@ -65,10 +65,10 @@ export default function ProgressTab() {
 
       if (goalData) {
         setGoal({
-          calories: goalData.daily_calorie_target,
-          protein: goalData.protein_target_grams,
-          carbs: goalData.carbs_target_grams,
-          fat: goalData.fat_target_grams,
+          calories: Number(goalData.daily_calorie_target) || 2000,
+          protein: Number(goalData.protein_target_grams) || 150,
+          carbs: Number(goalData.carbs_target_grams) || 200,
+          fat: Number(goalData.fat_target_grams) || 65,
         });
       }
 
@@ -79,9 +79,21 @@ export default function ProgressTab() {
         .gte('logged_at', startDate.toISOString())
         .lte('logged_at', today.toISOString());
 
+      console.log('Fetched meals for progress:', meals);
+      console.log('Goal data:', goalData);
+
       const aggregated: Record<string, DailyData> = {};
 
       meals?.forEach((meal) => {
+        console.log('Processing meal:', {
+          id: meal.id,
+          logged_at: meal.logged_at,
+          total_calories: meal.total_calories,
+          total_protein: meal.total_protein,
+          total_carbs: meal.total_carbs,
+          total_fat: meal.total_fat,
+        });
+        
         const date = new Date(meal.logged_at).toISOString().split('T')[0];
         if (!aggregated[date]) {
           aggregated[date] = {
@@ -92,10 +104,10 @@ export default function ProgressTab() {
             fat: 0,
           };
         }
-        aggregated[date].calories += meal.total_calories || 0;
-        aggregated[date].protein += meal.total_protein || 0;
-        aggregated[date].carbs += meal.total_carbs || 0;
-        aggregated[date].fat += meal.total_fat || 0;
+        aggregated[date].calories += Number(meal.total_calories) || 0;
+        aggregated[date].protein += Number(meal.total_protein) || 0;
+        aggregated[date].carbs += Number(meal.total_carbs) || 0;
+        aggregated[date].fat += Number(meal.total_fat) || 0;
       });
 
       const dataArray = Object.values(aggregated).sort((a, b) =>

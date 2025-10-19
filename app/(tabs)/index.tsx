@@ -69,7 +69,14 @@ export default function HomeTab() {
       const endOfDay = new Date();
       endOfDay.setHours(23, 59, 59, 999);
 
-      const { data: meals } = await supabase
+      console.log('Fetching meals for home tab...');
+      console.log('User ID:', user.id);
+      console.log('Date range:', {
+        start: startOfDay.toISOString(),
+        end: endOfDay.toISOString()
+      });
+
+      const { data: meals, error: mealsError } = await supabase
         .from('meal_logs')
         .select('*')
         .eq('user_id', user.id)
@@ -77,20 +84,28 @@ export default function HomeTab() {
         .lte('logged_at', endOfDay.toISOString())
         .order('logged_at', { ascending: false });
 
+      if (mealsError) {
+        console.error('Error fetching meals:', mealsError);
+      } else {
+        console.log('Fetched meals:', meals);
+        console.log('Number of meals:', meals?.length || 0);
+      }
+
       if (meals) {
         setRecentMeals(meals);
 
         const dailySummary = meals.reduce(
           (acc, meal) => ({
-            calories: acc.calories + (meal.total_calories || 0),
-            protein: acc.protein + (meal.total_protein || 0),
-            carbs: acc.carbs + (meal.total_carbs || 0),
-            fat: acc.fat + (meal.total_fat || 0),
+            calories: acc.calories + (Number(meal.total_calories) || 0),
+            protein: acc.protein + (Number(meal.total_protein) || 0),
+            carbs: acc.carbs + (Number(meal.total_carbs) || 0),
+            fat: acc.fat + (Number(meal.total_fat) || 0),
             meals: acc.meals + 1,
           }),
           { calories: 0, protein: 0, carbs: 0, fat: 0, meals: 0 }
         );
 
+        console.log('Daily summary calculated:', dailySummary);
         setSummary(dailySummary);
       }
     } catch (error) {

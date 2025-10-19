@@ -8,14 +8,21 @@ export default function SplashScreen() {
   const { session, profile, loading } = useAuth();
 
   useEffect(() => {
+    console.log('Splash screen - Auth state:', { loading, session: !!session, profile: !!profile });
+    console.log('Profile data:', profile);
+    
     if (!loading) {
       if (session && profile) {
+        console.log('User authenticated with profile, checking onboarding status...');
         if (profile.date_of_birth && profile.goal_weight_kg) {
+          console.log('Profile complete, redirecting to main app');
           router.replace('/(tabs)');
         } else {
+          console.log('Profile incomplete, redirecting to onboarding');
           router.replace('/onboarding/step1');
         }
       } else {
+        console.log('No session or profile, redirecting to welcome');
         router.replace('/welcome');
       }
     }

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeInUp, FadeIn } from 'react-native-reanimated';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { calculateCalorieTargets } from '@/utils/nutritionCalculations';
@@ -83,21 +82,19 @@ export default function GoalCalculation() {
             <Text style={styles.loadingText}>Calculating your nutrition plan...</Text>
           </View>
         ) : (
-          <Animated.View entering={FadeIn.duration(600)} style={styles.resultsContainer}>
-            <Animated.View entering={FadeInUp.delay(200).duration(600)}>
-              <View style={styles.iconContainer}>
-                <TrendingUp size={48} color="#ffffff" />
-              </View>
-            </Animated.View>
+          <View style={styles.resultsContainer}>
+            <View style={styles.iconContainer}>
+              <TrendingUp size={48} color="#ffffff" />
+            </View>
 
-            <Animated.View entering={FadeInUp.delay(400).duration(600)}>
+            <View>
               <Text style={styles.title}>Your Personalized Plan</Text>
               <Text style={styles.subtitle}>
                 Based on your profile and goals, here's your daily nutrition target
               </Text>
-            </Animated.View>
+            </View>
 
-            <Animated.View entering={FadeInUp.delay(600).duration(600)} style={styles.metricsCard}>
+            <View style={styles.metricsCard}>
               <View style={styles.mainMetric}>
                 <Text style={styles.mainMetricValue}>{targets.targetCalories}</Text>
                 <Text style={styles.mainMetricLabel}>Daily Calories</Text>
@@ -125,22 +122,20 @@ export default function GoalCalculation() {
                   BMR: {targets.bmr} cal • TDEE: {targets.tdee} cal
                 </Text>
               </View>
-            </Animated.View>
+            </View>
 
-            <Animated.View entering={FadeInUp.delay(800).duration(600)}>
-              <TouchableOpacity
-                style={[styles.continueButton, saving && styles.continueButtonDisabled]}
-                onPress={handleContinue}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#10b981" />
-                ) : (
-                  <Text style={styles.continueButtonText}>Continue</Text>
-                )}
-              </TouchableOpacity>
-            </Animated.View>
-          </Animated.View>
+            <TouchableOpacity
+              style={[styles.continueButton, saving && styles.continueButtonDisabled]}
+              onPress={handleContinue}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#10b981" />
+              ) : (
+                <Text style={styles.continueButtonText}>Continue</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
       </View>
     </LinearGradient>

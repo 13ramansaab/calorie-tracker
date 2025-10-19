@@ -29,6 +29,11 @@ export async function mapDetectedFoodToDatabase(
   userRegion?: string,
   dietaryPrefs?: string[]
 ): Promise<MappingResult> {
+  // Safety check for required properties
+  if (!detectedFood || !detectedFood.name) {
+    throw new Error('Invalid detected food: missing name property');
+  }
+
   const normalizedName = normalizeFoodName(detectedFood.name);
 
   const matchedFood = await fuzzySearchFoodItem(
@@ -65,6 +70,9 @@ export async function mapDetectedFoodToDatabase(
 }
 
 function normalizeFoodName(name: string): string {
+  if (!name || typeof name !== 'string') {
+    return 'unknown food';
+  }
   let normalized = name.toLowerCase().trim();
 
   Object.entries(INDIAN_SYNONYM_MAP).forEach(([synonym, canonical]) => {

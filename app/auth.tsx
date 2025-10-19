@@ -45,20 +45,26 @@ export default function AuthScreen() {
     setLoading(true);
 
     try {
+      console.log('Attempting to sign in/up...');
       const { error } = isSignUp
         ? await signUp(email, password)
         : await signIn(email, password);
 
       if (error) {
+        console.error('Auth error:', error);
         setError(error.message);
       } else {
+        console.log('Auth successful, redirecting...');
         if (isSignUp) {
+          console.log('Sign up successful, redirecting to onboarding');
           router.replace('/onboarding/step1');
         } else {
+          console.log('Sign in successful, redirecting to splash screen');
           router.replace('/');
         }
       }
     } catch (err: any) {
+      console.error('Auth exception:', err);
       setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);

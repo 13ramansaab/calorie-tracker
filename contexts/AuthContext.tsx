@@ -40,16 +40,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      if (error) throw error;
-      setProfile(data);
+      if (error) {
+        console.error('Error fetching profile:', error);
+        throw error;
+      }
+      
+      if (!data) {
+        console.log('No profile found, creating one...');
+        // Create a profile if it doesn't exist
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: userData.user.id,
+              email: userData.user.email,
+              locale: 'en-IN',
+              preferences: {},
+            });
+          
+          if (profileError) {
+            console.error('Error creating profile:', profileError);
+            throw profileError;
+          }
+          
+          // Fetch the newly created profile
+          const { data: newProfile, error: fetchError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+            
+          if (fetchError) {
+            console.error('Error fetching new profile:', fetchError);
+            throw fetchError;
+          }
+          
+          console.log('Profile created and fetched successfully:', newProfile);
+          setProfile(newProfile);
+        }
+      } else {
+        console.log('Profile fetched successfully:', data);
+        setProfile(data);
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
+    } finally {
+      // Always set loading to false after profile fetch attempt
+      console.log('Profile fetch completed, setting loading to false');
+      setLoading(false);
     }
   };
 
@@ -60,25 +106,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    console.log('AuthContext: Initializing auth state...');
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('AuthContext: Initial session:', !!session);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        console.log('AuthContext: User found, fetching profile...');
         fetchProfile(session.user.id);
+      } else {
+        console.log('AuthContext: No user, setting loading to false');
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, 'Session:', !!session);
       (async () => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
+          console.log('User authenticated, fetching profile...');
           await fetchProfile(session.user.id);
         } else {
+          console.log('No user, clearing profile');
           setProfile(null);
         }
-        setLoading(false);
+        console.log('Auth state change completed');
       })();
     });
 

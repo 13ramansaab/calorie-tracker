@@ -81,6 +81,7 @@ function formatAnalysisResponse(
     carbs: food.carbs || 0,
     fat: food.fat || 0,
     confidence: food.confidence || 60,
+    noteInfluence: 'none',
   }));
 
   const totals = foods.reduce(
@@ -121,6 +122,7 @@ function createFallbackResponse(text: string, error: any): AnalysisResponse {
         carbs: Math.round(estimatedCalories * 0.5 / 4),
         fat: Math.round(estimatedCalories * 0.35 / 9),
         confidence: 30,
+        noteInfluence: 'none',
       },
     ],
     totalCalories: estimatedCalories,
