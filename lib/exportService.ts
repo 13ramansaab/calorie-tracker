@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { Platform } from 'react-native';
 
 interface MealLogItem {
   date: string;
@@ -90,21 +89,18 @@ export async function exportToCSV(userId: string, startDate: Date, endDate: Date
     ].join('\n');
 
     const fileName = `nutrition_log_${startDate.toISOString().split('T')[0]}_to_${endDate.toISOString().split('T')[0]}.csv`;
-    const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
-    await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
-
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'text/csv',
-        dialogTitle: 'Export Nutrition Log',
-        UTI: 'public.comma-separated-values-text',
-      });
+    if (Platform.OS === 'web') {
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      return fileName;
     }
 
-    return fileUri;
+    return csvContent;
   } catch (error) {
     console.error('Error exporting to CSV:', error);
     return null;
@@ -121,7 +117,7 @@ export async function generateWeeklyReportHTML(
     .select('*')
     .eq('user_id', userId)
     .gte('logged_at', weekStart.toISOString())
-    .lte('logged_at', endDate.toISOString());
+    .lte('logged_at', weekEnd.toISOString());
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -287,20 +283,18 @@ export async function exportToPDF(
     const html = await generateWeeklyReportHTML(userId, weekStart, weekEnd);
 
     const fileName = `weekly_report_${weekStart.toISOString().split('T')[0]}.html`;
-    const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
-    await FileSystem.writeAsStringAsync(fileUri, html, {
-      encoding: FileSystem.EncodingType.UTF8,
-    });
-
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(fileUri, {
-        mimeType: 'text/html',
-        dialogTitle: 'Weekly Report',
-      });
+    if (Platform.OS === 'web') {
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      return fileName;
     }
 
-    return fileUri;
+    return html;
   } catch (error) {
     console.error('Error exporting to PDF:', error);
     return null;
@@ -312,25 +306,7 @@ export async function createShareableLink(
   expirationDays: number = 7
 ): Promise<string | null> {
   try {
-    const fileName = fileUri.split('/').pop() || 'export';
-    const fileContent = await FileSystem.readAsStringAsync(fileUri);
-    const base64 = Buffer.from(fileContent).toString('base64');
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + expirationDays);
-
-    const { data, error } = await supabase.from('shared_files').insert({
-      file_name: fileName,
-      file_content: base64,
-      expires_at: expiresAt.toISOString(),
-    }).select().single();
-
-    if (error || !data) {
-      console.error('Error creating shareable link:', error);
-      return null;
-    }
-
-    return `${process.env.EXPO_PUBLIC_SUPABASE_URL}/shared/${data.id}`;
+    return null;
   } catch (error) {
     console.error('Error creating shareable link:', error);
     return null;

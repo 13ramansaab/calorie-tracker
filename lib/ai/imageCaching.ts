@@ -13,7 +13,7 @@ export interface CachedAnalysis {
 export async function generateImageHash(imageUri: string): Promise<string | null> {
   try {
     const base64 = await FileSystem.readAsStringAsync(imageUri, {
-      encoding: FileSystem.EncodingType.Base64,
+      encoding: 1,
     });
 
     const hash = await Crypto.digestStringAsync(

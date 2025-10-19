@@ -182,13 +182,13 @@ export default function ProfileTab() {
           <View style={styles.menuList}>
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Alert.alert('Coming Soon', 'Help center will be available soon')}
+              onPress={() => router.push('/support')}
             >
               <View style={styles.menuItemLeft}>
                 <View style={styles.menuIcon}>
                   <HelpCircle size={20} color="#6b7280" />
                 </View>
-                <Text style={styles.menuItemText}>Help Center</Text>
+                <Text style={styles.menuItemText}>Help & Support</Text>
               </View>
               <ChevronRight size={20} color="#9ca3af" />
             </TouchableOpacity>
@@ -208,13 +208,26 @@ export default function ProfileTab() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Alert.alert('Coming Soon', 'Privacy policy will be available soon')}
+              onPress={() => router.push('/privacy')}
             >
               <View style={styles.menuItemLeft}>
                 <View style={styles.menuIcon}>
                   <Shield size={20} color="#6b7280" />
                 </View>
                 <Text style={styles.menuItemText}>Privacy Policy</Text>
+              </View>
+              <ChevronRight size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/terms')}
+            >
+              <View style={styles.menuItemLeft}>
+                <View style={styles.menuIcon}>
+                  <Shield size={20} color="#6b7280" />
+                </View>
+                <Text style={styles.menuItemText}>Terms of Service</Text>
               </View>
               <ChevronRight size={20} color="#9ca3af" />
             </TouchableOpacity>

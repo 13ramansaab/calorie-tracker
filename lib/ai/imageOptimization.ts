@@ -24,7 +24,7 @@ export async function optimizeImageForAnalysis(
       throw new Error('Image file does not exist');
     }
 
-    const originalSize = fileInfo.size || 0;
+    const originalSize = (fileInfo as any).size || 0;
 
     if (originalSize > MAX_IMAGE_SIZE_BYTES) {
       throw new Error(
@@ -51,7 +51,7 @@ export async function optimizeImageForAnalysis(
     );
 
     const optimizedInfo = await FileSystem.getInfoAsync(manipResult.uri);
-    const optimizedSize = optimizedInfo.size || 0;
+    const optimizedSize = (optimizedInfo as any).size || 0;
 
     return {
       uri: manipResult.uri,

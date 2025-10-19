@@ -15,6 +15,14 @@ interface Profile {
   activity_level: string | null;
   locale: string | null;
   preferences: any;
+  subscription_tier: string | null;
+  subscription_status: string | null;
+  subscription_end_date: string | null;
+  trial_start: string | null;
+  trial_end: string | null;
+  stripe_customer_id: string | null;
+  region: string | null;
+  dietary_preferences: any;
   created_at: string;
   updated_at: string;
 }
