@@ -21,6 +21,7 @@ interface ContextAssistBoxProps {
     items: string[];
     frequency: number;
   }>;
+  onLengthWarning?: (warning: string) => void;
 }
 
 const DEFAULT_EXAMPLES = [
@@ -37,14 +38,31 @@ export function ContextAssistBox({
   examples = DEFAULT_EXAMPLES,
   langHint,
   repeatMealSuggestions = [],
+  onLengthWarning,
 }: ContextAssistBoxProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
+  const [showLengthWarning, setShowLengthWarning] = useState(false);
 
   const charCount = value.length;
   const isNearLimit = charCount > maxLength * 0.8;
   const isOverLimit = charCount > maxLength;
+
+  useEffect(() => {
+    if (isOverLimit) {
+      setShowLengthWarning(true);
+      onLengthWarning?.('Keep it short—counts and units work best.');
+
+      const timer = setTimeout(() => {
+        setShowLengthWarning(false);
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    } else {
+      setShowLengthWarning(false);
+    }
+  }, [isOverLimit, onLengthWarning]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -180,7 +198,15 @@ export function ContextAssistBox({
         </TouchableOpacity>
       )}
 
-      {(value.length > 0 || isFocused) && (
+      {showLengthWarning && (
+        <View style={styles.warningBox}>
+          <Text style={styles.warningText}>
+            Keep it short—counts and units work best.
+          </Text>
+        </View>
+      )}
+
+      {!showLengthWarning && (value.length > 0 || isFocused) && (
         <View style={styles.infoBox}>
           <Text style={styles.infoText}>
             Tip: add counts like '2 chapati' or units like '1 katori dal' to improve accuracy.
@@ -349,6 +375,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6b7280',
     fontStyle: 'italic',
+  },
+  warningBox: {
+    padding: 10,
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+  },
+  warningText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400e',
   },
   repeatSuggestionsSection: {
     gap: 8,
