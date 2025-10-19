@@ -4,16 +4,19 @@ import { TRIAL_DURATION_DAYS } from '@/types/subscription';
 export interface Subscription {
   id: string;
   user_id: string;
-  plan: 'free' | 'trial' | 'premium_monthly' | 'premium_yearly';
-  status: 'active' | 'canceled' | 'expired' | 'past_due';
-  trial_start_date: string | null;
-  trial_end_date: string | null;
-  current_period_start: string | null;
-  current_period_end: string | null;
+  status: 'trialing' | 'active' | 'canceled' | 'past_due' | 'incomplete' | 'incomplete_expired' | 'unpaid';
+  tier: 'free' | 'premium' | 'lifetime';
+  trial_start: string | null;
+  trial_end: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  payment_failed_at: string | null;
+  canceled_at: string | null;
   cancel_at_period_end: boolean;
-  provider: string | null;
-  provider_subscription_id: string | null;
-  provider_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_customer_id: string | null;
+  stripe_price_id: string | null;
+  metadata: any;
   created_at: string;
   updated_at: string;
 }
@@ -50,7 +53,7 @@ async function createFreeSubscription(userId: string): Promise<Subscription> {
     .from('subscriptions')
     .insert({
       user_id: userId,
-      plan: 'free',
+      tier: 'free',
       status: 'active',
     })
     .select()
@@ -72,10 +75,10 @@ export async function startFreeTrial(userId: string): Promise<Subscription> {
   const { data, error } = await supabase
     .from('subscriptions')
     .update({
-      plan: 'trial',
-      status: 'active',
-      trial_start_date: trialStart.toISOString(),
-      trial_end_date: trialEnd.toISOString(),
+      tier: 'premium',
+      status: 'trialing',
+      trial_start: trialStart.toISOString(),
+      trial_end: trialEnd.toISOString(),
     })
     .eq('user_id', userId)
     .select()
@@ -87,7 +90,7 @@ export async function startFreeTrial(userId: string): Promise<Subscription> {
   }
 
   await trackEvent(userId, 'trial_started', {
-    trial_end_date: trialEnd.toISOString(),
+    trial_end: trialEnd.toISOString(),
   });
 
   return data;
@@ -95,28 +98,29 @@ export async function startFreeTrial(userId: string): Promise<Subscription> {
 
 export async function upgradeToPremium(
   userId: string,
-  plan: 'premium_monthly' | 'premium_yearly',
+  priceId: string,
   providerData: {
-    provider: string;
     subscription_id: string;
     customer_id: string;
   }
 ): Promise<Subscription> {
   const periodStart = new Date();
   const periodEnd = new Date();
-  periodEnd.setMonth(periodEnd.getMonth() + (plan === 'premium_monthly' ? 1 : 12));
+  periodEnd.setMonth(periodEnd.getMonth() + 1);
 
   const { data, error } = await supabase
     .from('subscriptions')
     .update({
-      plan,
+      tier: 'premium',
       status: 'active',
-      current_period_start: periodStart.toISOString(),
-      current_period_end: periodEnd.toISOString(),
-      provider: providerData.provider,
-      provider_subscription_id: providerData.subscription_id,
-      provider_customer_id: providerData.customer_id,
+      period_start: periodStart.toISOString(),
+      period_end: periodEnd.toISOString(),
+      stripe_subscription_id: providerData.subscription_id,
+      stripe_customer_id: providerData.customer_id,
+      stripe_price_id: priceId,
       cancel_at_period_end: false,
+      trial_start: null,
+      trial_end: null,
     })
     .eq('user_id', userId)
     .select()
@@ -128,8 +132,7 @@ export async function upgradeToPremium(
   }
 
   await trackEvent(userId, 'subscription_upgraded', {
-    plan,
-    provider: providerData.provider,
+    price_id: priceId,
   });
 
   return data;
@@ -137,11 +140,11 @@ export async function upgradeToPremium(
 
 export async function switchPlan(
   userId: string,
-  newPlan: 'premium_monthly' | 'premium_yearly'
+  newPriceId: string
 ): Promise<Subscription> {
   const { data, error } = await supabase
     .from('subscriptions')
-    .update({ plan: newPlan })
+    .update({ stripe_price_id: newPriceId })
     .eq('user_id', userId)
     .select()
     .single();
@@ -151,7 +154,7 @@ export async function switchPlan(
     throw error;
   }
 
-  await trackEvent(userId, 'plan_switched', { new_plan: newPlan });
+  await trackEvent(userId, 'plan_switched', { new_price_id: newPriceId });
 
   return data;
 }
@@ -185,27 +188,31 @@ export async function cancelSubscription(
 export function isPremiumUser(subscription: Subscription | null): boolean {
   if (!subscription) return false;
 
-  if (subscription.status !== 'active') return false;
+  if (subscription.tier === 'lifetime') return true;
 
-  if (subscription.plan === 'trial') {
-    if (!subscription.trial_end_date) return false;
-    return new Date(subscription.trial_end_date) > new Date();
+  if (subscription.status === 'trialing') {
+    if (!subscription.trial_end) return false;
+    return new Date(subscription.trial_end) > new Date();
   }
 
-  return subscription.plan === 'premium_monthly' || subscription.plan === 'premium_yearly';
+  if (subscription.status === 'active' && subscription.tier === 'premium') {
+    return true;
+  }
+
+  return false;
 }
 
 export function isInTrial(subscription: Subscription | null): boolean {
-  if (!subscription || subscription.plan !== 'trial') return false;
-  if (!subscription.trial_end_date) return false;
-  return new Date(subscription.trial_end_date) > new Date();
+  if (!subscription || subscription.status !== 'trialing') return false;
+  if (!subscription.trial_end) return false;
+  return new Date(subscription.trial_end) > new Date();
 }
 
 export function getTrialDaysRemaining(subscription: Subscription | null): number {
   if (!isInTrial(subscription)) return 0;
-  if (!subscription?.trial_end_date) return 0;
+  if (!subscription?.trial_end) return 0;
 
-  const trialEnd = new Date(subscription.trial_end_date);
+  const trialEnd = new Date(subscription.trial_end);
   const now = new Date();
   const diffTime = trialEnd.getTime() - now.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -346,10 +353,111 @@ export async function incrementUsage(
   }
 }
 
+export async function handlePaymentFailed(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      status: 'past_due',
+      payment_failed_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error updating payment failed status:', error);
+    throw error;
+  }
+
+  await trackEvent(userId, 'payment_failed', {
+    timestamp: new Date().toISOString(),
+  });
+}
+
+export async function handlePaymentSucceeded(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      status: 'active',
+      payment_failed_at: null,
+    })
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error updating payment succeeded status:', error);
+    throw error;
+  }
+
+  await trackEvent(userId, 'payment_succeeded', {
+    timestamp: new Date().toISOString(),
+  });
+}
+
+export async function updateSubscriptionPeriod(
+  userId: string,
+  periodStart: Date,
+  periodEnd: Date
+): Promise<void> {
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({
+      period_start: periodStart.toISOString(),
+      period_end: periodEnd.toISOString(),
+    })
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error updating subscription period:', error);
+    throw error;
+  }
+}
+
+export function getDaysUntilRenewal(subscription: Subscription | null): number {
+  if (!subscription?.period_end) return 0;
+
+  const periodEnd = new Date(subscription.period_end);
+  const now = new Date();
+  const diffTime = periodEnd.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  return Math.max(0, diffDays);
+}
+
+export function getSubscriptionStatusMessage(subscription: Subscription | null): string {
+  if (!subscription) return 'No active subscription';
+
+  if (subscription.status === 'trialing') {
+    const daysLeft = getTrialDaysRemaining(subscription);
+    return `Trial ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
+  }
+
+  if (subscription.status === 'past_due') {
+    return 'Payment failed. Please update your payment method.';
+  }
+
+  if (subscription.cancel_at_period_end) {
+    const daysLeft = getDaysUntilRenewal(subscription);
+    return `Subscription ends in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`;
+  }
+
+  if (subscription.status === 'active' && subscription.tier === 'premium') {
+    return 'Premium subscription active';
+  }
+
+  return 'Free plan';
+}
+
 async function trackEvent(
   userId: string,
   eventName: string,
   metadata?: Record<string, any>
 ): Promise<void> {
-  console.log('Event:', eventName, 'User:', userId, 'Metadata:', metadata);
+  try {
+    await supabase.from('event_tracking').insert({
+      user_id: userId,
+      event_name: eventName,
+      event_data: metadata || {},
+      created_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Error tracking event:', error);
+  }
 }
