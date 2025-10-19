@@ -44,13 +44,7 @@ export function ConflictChipGroup({
       </View>
 
       <View style={styles.description}>
-        <Text style={styles.descriptionText}>
-          {conflictType === 'quantity'
-            ? 'Which count is correct?'
-            : conflictType === 'portion'
-              ? 'Which portion size is correct?'
-              : 'Which name is correct?'}
-        </Text>
+        <Text style={styles.descriptionText}>Which looks right?</Text>
       </View>
 
       <View style={styles.chipsContainer}>
@@ -73,7 +67,9 @@ export function ConflictChipGroup({
             )}
           </View>
           <Text style={styles.chipValue}>{formatValue(modelValue)}</Text>
-          <Text style={styles.chipLabel}>From photo analysis</Text>
+          <Text style={styles.chipLabel}>
+            {formatValue(modelValue)} {itemName} (from photo)
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.divider}>
@@ -101,7 +97,9 @@ export function ConflictChipGroup({
             )}
           </View>
           <Text style={styles.chipValue}>{formatValue(noteValue)}</Text>
-          <Text style={styles.chipLabel}>From your note</Text>
+          <Text style={styles.chipLabel}>
+            {formatValue(noteValue)} {itemName} (from your note)
+          </Text>
         </TouchableOpacity>
       </View>
 

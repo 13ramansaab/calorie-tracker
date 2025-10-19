@@ -25,19 +25,15 @@ interface ContextAssistBoxProps {
 
 const DEFAULT_EXAMPLES = [
   '2 chapati + 1 bowl paneer bhurji',
-  '1 cup dal + 1 katori rice + salad',
+  '1 cup dal + 1 katori rice',
   'idli (3) + sambar (1 katori)',
-  '2 paratha with aloo sabzi',
-  'dosa (1) + coconut chutney + sambar',
-  '1 plate biryani with raita',
-  '3 roti + dal fry + bhindi masala',
 ];
 
 export function ContextAssistBox({
   value,
   onChange,
   maxLength = 140,
-  placeholder = 'e.g., 2 chapati + dal, 3 idlis with sambar',
+  placeholder = '2 chapati + 1 bowl paneer bhurji',
   examples = DEFAULT_EXAMPLES,
   langHint,
   repeatMealSuggestions = [],
@@ -65,11 +61,8 @@ export function ContextAssistBox({
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <MessageSquare size={18} color="#10b981" />
-          <Text style={styles.title}>Add Context (Optional)</Text>
+          <Text style={styles.title}>Add a quick note (optional)</Text>
         </View>
-        <Text style={styles.subtitle}>
-          Help AI identify portions & items more accurately
-        </Text>
       </View>
 
       {!isFocused && !value && (
@@ -187,17 +180,19 @@ export function ContextAssistBox({
         </TouchableOpacity>
       )}
 
-      <View style={styles.infoBox}>
-        <Text style={styles.infoText}>
-          💡 Include quantities (e.g., "2 rotis", "1 cup", "small bowl") for better portion estimates
-          {langHint && (
-            <Text style={styles.langHintText}>
-              {' '}
-              • {langHint}
-            </Text>
-          )}
-        </Text>
-      </View>
+      {(value.length > 0 || isFocused) && (
+        <View style={styles.infoBox}>
+          <Text style={styles.infoText}>
+            Tip: add counts like '2 chapati' or units like '1 katori dal' to improve accuracy.
+            {langHint && (
+              <Text style={styles.langHintText}>
+                {' '}
+                • {langHint}
+              </Text>
+            )}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
