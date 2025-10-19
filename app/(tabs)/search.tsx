@@ -11,6 +11,7 @@ import {
 import { Search, X } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams } from 'expo-router';
+import { useTabBarPadding } from '@/hooks/useTabBarPadding';
 
 interface FoodItem {
   id: string;
@@ -24,6 +25,7 @@ interface FoodItem {
 
 export default function SearchTab() {
   const params = useLocalSearchParams<{ seedQuery?: string }>();
+  const { contentPadding } = useTabBarPadding();
   const [searchQuery, setSearchQuery] = useState(params.seedQuery || '');
   const [results, setResults] = useState<FoodItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -133,7 +135,7 @@ export default function SearchTab() {
           data={results}
           renderItem={renderFoodItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.resultsList}
+          contentContainerStyle={[styles.resultsList, { paddingBottom: contentPadding }]}
         />
       ) : searchQuery.length > 0 ? (
         <View style={styles.emptyContainer}>
@@ -231,7 +233,6 @@ const styles = StyleSheet.create({
   },
   resultsList: {
     paddingHorizontal: 24,
-    paddingBottom: 24,
   },
   foodItem: {
     padding: 16,

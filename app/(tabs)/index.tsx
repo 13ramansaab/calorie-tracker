@@ -17,6 +17,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Plus, MessageCircle, Flame, Award } from 'lucide-react-native';
+import { useTabBarPadding } from '@/hooks/useTabBarPadding';
 
 interface DailySummary {
   calories: number;
@@ -36,6 +37,7 @@ interface Goal {
 export default function HomeTab() {
   const router = useRouter();
   const { user, profile } = useAuth();
+  const { contentPadding } = useTabBarPadding();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [summary, setSummary] = useState<DailySummary>({
@@ -171,7 +173,7 @@ export default function HomeTab() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: contentPadding }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#10b981" />
       }
@@ -337,9 +339,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f9fafb',
   },
-  scrollContent: {
-    paddingBottom: 40,
-  },
+  scrollContent: {},
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
