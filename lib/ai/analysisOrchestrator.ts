@@ -7,6 +7,10 @@ import { detectContradictoryNote, validateNoteLength, sanitizeNoteForStorage } f
 import { applyPresetToPortion } from './unitPresets';
 import { applyUserPriors, getUserPortionPriors } from './personalizationService';
 import { logEvent } from './instrumentation';
+import { optimizeImageForAnalysis } from './imageOptimization';
+import { retryWithBackoff, retryOnBadJson } from './retryLogic';
+import { shouldUseCachedAnalysis, saveCachedAnalysis } from './analysisCache';
+import { logAnalysisEvent } from './monitoring';
 import { DetectedFood, AnalysisResponse } from '@/types/ai';
 
 export interface AnalysisOptions {
@@ -27,6 +31,8 @@ export interface AnalysisResult {
   noteConflict: boolean;
   conflicts: any[];
   warnings: string[];
+  wasCached?: boolean;
+  latencyMs?: number;
 }
 
 export async function runPhotoAnalysis(options: AnalysisOptions): Promise<AnalysisResult> {
@@ -36,9 +42,16 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
     throw new Error('Photo URI is required for photo analysis');
   }
 
+  const startTime = Date.now();
   const warnings: string[] = [];
   let sanitizedNote: string | undefined;
   let noteConflict = false;
+  let wasCached = false;
+
+  await logAnalysisEvent(userId, 'ai_analysis_started', {
+    latency_ms: 0,
+    note_used: !!userNote,
+  });
 
   if (userNote) {
     const validation = validateNoteLength(userNote, 140);
@@ -59,14 +72,58 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
     });
   }
 
-  const analysisResponse = await analyzePhotoWithVision({
-    photoUri,
-    userContext: {
-      region: userRegion,
-      dietaryPrefs,
-      auxText: sanitizedNote,
-    },
-  });
+  const cacheCheck = await shouldUseCachedAnalysis(userId, photoUri, sanitizedNote);
+  if (cacheCheck.useCache && cacheCheck.cachedAnalysis) {
+    wasCached = true;
+    const latencyMs = Date.now() - startTime;
+
+    await logAnalysisEvent(userId, 'cache_hit', {
+      latency_ms: latencyMs,
+    });
+
+    await logAnalysisEvent(userId, 'ai_analysis_completed', {
+      latency_ms: latencyMs,
+      was_cached: true,
+    });
+
+    return {
+      analysisId: cacheCheck.cachedAnalysis.id,
+      foods: cacheCheck.cachedAnalysis.parsed_output.items,
+      totalCalories: cacheCheck.cachedAnalysis.parsed_output.total_calories,
+      overallConfidence: cacheCheck.cachedAnalysis.overall_confidence,
+      usedNote: !!sanitizedNote,
+      noteConflict: false,
+      conflicts: [],
+      warnings: ['Using cached analysis from previous session'],
+      wasCached: true,
+      latencyMs,
+    };
+  }
+
+  const optimizedImage = await optimizeImageForAnalysis(photoUri);
+  if (optimizedImage.wasOptimized) {
+    warnings.push(
+      `Image optimized from ${(optimizedImage.originalSize! / 1024 / 1024).toFixed(1)}MB to ${(optimizedImage.sizeBytes / 1024 / 1024).toFixed(1)}MB`
+    );
+  }
+
+  const analysisResponse = await retryOnBadJson(
+    () =>
+      retryWithBackoff(
+        () =>
+          analyzePhotoWithVision({
+            photoUri: optimizedImage.uri,
+            userContext: {
+              region: userRegion,
+              dietaryPrefs,
+              auxText: sanitizedNote,
+            },
+          }),
+        undefined,
+        'Vision Analysis'
+      ),
+    2
+  );
 
   const mappedFoods = await Promise.all(
     analysisResponse.items.map(async (item) => {
@@ -135,11 +192,13 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
   const avgConfidence =
     adjustedFoods.reduce((sum, food) => sum + food.confidence, 0) / adjustedFoods.length;
 
+  const latencyMs = Date.now() - startTime;
+
   const { data: photoAnalysis, error: insertError } = await supabase
     .from('photo_analyses')
     .insert({
       user_id: userId,
-      photo_url: photoUri,
+      photo_url: optimizedImage.uri,
       model_version: 'gpt-4-vision-preview',
       user_note: sanitizedNote || null,
       note_used: !!sanitizedNote,
@@ -154,14 +213,31 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
         meal_type: mealType,
       },
       overall_confidence: avgConfidence,
+      latency_ms: latencyMs,
       status: 'completed',
     })
     .select()
     .single();
 
   if (insertError || !photoAnalysis) {
+    await logAnalysisEvent(userId, 'ai_analysis_failed', {
+      latency_ms: latencyMs,
+      error_type: 'database_error',
+      error_message: insertError?.message || 'Unknown error',
+    });
     throw new Error('Failed to save analysis to database');
   }
+
+  await saveCachedAnalysis(userId, await import('./analysisCache').then(m => m.computeImageHash(photoUri)), photoAnalysis.id);
+
+  await logAnalysisEvent(userId, 'ai_analysis_completed', {
+    latency_ms: latencyMs,
+    confidence_avg: avgConfidence,
+    items_count: adjustedFoods.length,
+    note_used: !!sanitizedNote,
+    was_cached: false,
+    image_size_mb: optimizedImage.sizeBytes / 1024 / 1024,
+  });
 
   if (sanitizedNote) {
     await logEvent(userId, 'note_used_in_analysis', {
@@ -180,6 +256,8 @@ export async function runPhotoAnalysis(options: AnalysisOptions): Promise<Analys
     noteConflict,
     conflicts,
     warnings,
+    wasCached,
+    latencyMs,
   };
 }
 
