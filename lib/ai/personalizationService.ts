@@ -21,15 +21,21 @@ export interface RepeatMealSuggestion {
 }
 
 export async function getUserMealPatterns(
-  limit: number = 5
+  limit: number = 5,
+  mealType?: string
 ): Promise<UserMealPattern[]> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('user_meal_patterns')
       .select('*')
       .order('frequency', { ascending: false })
-      .order('last_logged_at', { ascending: false })
-      .limit(limit);
+      .order('last_logged_at', { ascending: false });
+
+    if (mealType) {
+      query = query.eq('meal_type', mealType);
+    }
+
+    const { data, error } = await query.limit(limit);
 
     if (error) throw error;
 
@@ -123,6 +129,114 @@ export function buildRepeatMealSuggestions(
     });
 }
 
+export async function getMealTimeSuggestions(
+  userId: string,
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack'
+): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('user_priors')
+      .select('frequent_breakfast_items, frequent_dinner_items, portion_defaults')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return getDefaultMealSuggestions(mealType);
+    }
+
+    if (mealType === 'breakfast' && data.frequent_breakfast_items) {
+      return data.frequent_breakfast_items as string[];
+    }
+
+    if (mealType === 'dinner' && data.frequent_dinner_items) {
+      return data.frequent_dinner_items as string[];
+    }
+
+    return getDefaultMealSuggestions(mealType);
+  } catch (error) {
+    console.error('Error fetching meal time suggestions:', error);
+    return getDefaultMealSuggestions(mealType);
+  }
+}
+
+function getDefaultMealSuggestions(mealType: string): string[] {
+  const defaults: Record<string, string[]> = {
+    breakfast: ['Poha', 'Paratha', 'Idli', 'Dosa', 'Upma', 'Omelette'],
+    lunch: ['Dal', 'Rice', 'Roti', 'Sabzi', 'Curd', 'Salad'],
+    dinner: ['Chapati', 'Dal', 'Paneer', 'Chicken', 'Rice', 'Raita'],
+    snack: ['Fruits', 'Nuts', 'Biscuits', 'Samosa', 'Tea', 'Coffee'],
+  };
+
+  return defaults[mealType] || [];
+}
+
+export async function updateUserPriors(userId: string, mealType: string, items: string[]): Promise<void> {
+  try {
+    const { data: existing } = await supabase
+      .from('user_priors')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from('user_priors').insert({
+        user_id: userId,
+        frequent_breakfast_items: mealType === 'breakfast' ? items : [],
+        frequent_dinner_items: mealType === 'dinner' ? items : [],
+        portion_defaults: {},
+      });
+      return;
+    }
+
+    const update: any = {};
+
+    if (mealType === 'breakfast') {
+      const currentItems = (existing.frequent_breakfast_items as string[]) || [];
+      const merged = Array.from(new Set([...currentItems, ...items])).slice(0, 10);
+      update.frequent_breakfast_items = merged;
+    } else if (mealType === 'dinner') {
+      const currentItems = (existing.frequent_dinner_items as string[]) || [];
+      const merged = Array.from(new Set([...currentItems, ...items])).slice(0, 10);
+      update.frequent_dinner_items = merged;
+    }
+
+    await supabase
+      .from('user_priors')
+      .update(update)
+      .eq('user_id', userId);
+  } catch (error) {
+    console.error('Error updating user priors:', error);
+  }
+}
+
+export async function savePortionDefault(
+  userId: string,
+  foodName: string,
+  portionGrams: number
+): Promise<void> {
+  try {
+    const { data: existing } = await supabase
+      .from('user_priors')
+      .select('portion_defaults')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const portionDefaults = (existing?.portion_defaults as Record<string, number>) || {};
+    portionDefaults[foodName.toLowerCase()] = portionGrams;
+
+    await supabase
+      .from('user_priors')
+      .upsert({
+        user_id: userId,
+        portion_defaults: portionDefaults,
+      }, {
+        onConflict: 'user_id'
+      });
+  } catch (error) {
+    console.error('Error saving portion default:', error);
+  }
+}
+
 export function applyUserPriors(
   detectedPortion: number,
   foodName: string,
@@ -131,7 +245,7 @@ export function applyUserPriors(
   if (!foodName || typeof foodName !== 'string') {
     return detectedPortion;
   }
-  
+
   const userPrior = userPriors[foodName.toLowerCase()];
 
   if (!userPrior) {
