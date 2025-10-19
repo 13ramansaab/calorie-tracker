@@ -11,8 +11,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { Camera, FlipHorizontal, X, Check, ImageIcon, MessageSquare } from 'lucide-react-native';
+import { Camera, FlipHorizontal, X, Check, ImageIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { ContextAssistBox } from './ContextAssistBox';
 
 interface CameraCaptureProps {
   onPhotoCapture: (uri: string, context?: CaptureContext) => void;
@@ -24,13 +25,6 @@ interface CaptureContext {
   mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
 }
 
-const CONTEXT_EXAMPLES = [
-  '2 chapatis with dal',
-  '3 idlis with sambar',
-  'Small bowl of rice',
-  'Lunch thali',
-  '1 dosa with chutney',
-];
 
 export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) {
   const [facing, setFacing] = useState<CameraType>('back');
@@ -130,56 +124,37 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
           <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
 
           <View style={styles.contextSection}>
-            <View style={styles.contextHeader}>
-              <MessageSquare size={20} color="#10b981" />
-              <Text style={styles.contextTitle}>Add Context (Optional)</Text>
-            </View>
-            <Text style={styles.contextHint}>Help us identify portions & items more accurately</Text>
-
             <View style={styles.mealTypeSelector}>
-              {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.mealTypeChip,
-                    selectedMealType === type && styles.mealTypeChipActive,
-                  ]}
-                  onPress={() => setSelectedMealType(type)}
-                >
-                  <Text
+              <Text style={styles.mealTypeLabel}>Meal Type</Text>
+              <View style={styles.mealTypeChips}>
+                {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
+                  <TouchableOpacity
+                    key={type}
                     style={[
-                      styles.mealTypeText,
-                      selectedMealType === type && styles.mealTypeTextActive,
+                      styles.mealTypeChip,
+                      selectedMealType === type && styles.mealTypeChipActive,
                     ]}
+                    onPress={() => setSelectedMealType(type)}
                   >
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.mealTypeText,
+                        selectedMealType === type && styles.mealTypeTextActive,
+                      ]}
+                    >
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
-            <TextInput
-              style={styles.contextInput}
-              placeholder="e.g., 2 chapatis with dal, 3 idlis"
-              placeholderTextColor="#9ca3af"
+            <ContextAssistBox
               value={userNote}
-              onChangeText={setUserNote}
-              multiline
-              numberOfLines={2}
-              maxLength={150}
+              onChange={setUserNote}
+              maxLength={140}
+              placeholder="e.g., 2 chapati + dal, 3 idlis with sambar"
             />
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.examplesScroll}>
-              {CONTEXT_EXAMPLES.map((example, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.exampleChip}
-                  onPress={() => setUserNote(example)}
-                >
-                  <Text style={styles.exampleText}>{example}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
           </View>
         </ScrollView>
 
@@ -368,27 +343,19 @@ const styles = StyleSheet.create({
   },
   contextSection: {
     padding: 20,
-    gap: 12,
-  },
-  contextHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  contextTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1f2937',
-  },
-  contextHint: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
+    gap: 20,
   },
   mealTypeSelector: {
+    gap: 10,
+  },
+  mealTypeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  mealTypeChips: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 4,
   },
   mealTypeChip: {
     paddingVertical: 8,
@@ -409,31 +376,6 @@ const styles = StyleSheet.create({
   },
   mealTypeTextActive: {
     color: '#059669',
-  },
-  contextInput: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    color: '#1f2937',
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  examplesScroll: {
-    marginTop: 4,
-  },
-  exampleChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
-    marginRight: 8,
-  },
-  exampleText: {
-    fontSize: 13,
-    color: '#6b7280',
   },
   previewControls: {
     position: 'absolute',

@@ -10,9 +10,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Trash2, Edit, Camera, MessageSquare } from 'lucide-react-native';
+import { ChevronLeft, Trash2, Edit, Camera } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { ContextBanner } from '@/components/ContextBanner';
 
 interface MealLog {
   id: string;
@@ -194,11 +195,11 @@ export default function MealDetail() {
               </Text>
             </View>
             {meal.notes && (
-              <View style={styles.userNoteBox}>
-                <MessageSquare size={14} color="#10b981" />
-                <Text style={styles.userNoteLabel}>Your note:</Text>
-                <Text style={styles.userNoteText}>{meal.notes}</Text>
-              </View>
+              <ContextBanner
+                text={meal.notes}
+                variant="detail"
+                collapsible={false}
+              />
             )}
           </View>
         </View>
@@ -372,27 +373,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#1e40af',
-  },
-  userNoteBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    padding: 12,
-    backgroundColor: '#f0fdf4',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#86efac',
-  },
-  userNoteLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#059669',
-  },
-  userNoteText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#047857',
-    lineHeight: 18,
   },
   section: {
     padding: 24,

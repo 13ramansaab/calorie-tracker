@@ -10,10 +10,11 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { X, Plus, Lightbulb, AlertCircle, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { X, Plus, Lightbulb, AlertCircle } from 'lucide-react-native';
 import { AnalysisItemRow } from './AIComponents';
 import { NumberInput } from './FormInput';
 import { Chips } from './Chips';
+import { ContextBanner } from './ContextBanner';
 import { AnalysisResponse, DetectedFood } from '@/types/ai';
 import { analyzePhotoWithVision } from '@/lib/ai/visionService';
 import { mapDetectedFoodToDatabase } from '@/lib/ai/mappingService';
@@ -49,8 +50,8 @@ export function AIAnalysisSheet({
   const [selectedMealType, setSelectedMealType] = useState(mealType);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingPortion, setEditingPortion] = useState(100);
-  const [showUserNote, setShowUserNote] = useState(true);
   const [usedUserNote, setUsedUserNote] = useState(false);
+  const [editingContext, setEditingContext] = useState(false);
 
   useEffect(() => {
     if (visible && photoUri && !analysis) {
@@ -190,33 +191,12 @@ export function AIAnalysisSheet({
           )}
 
           {userNote && userNote.trim() && (
-            <TouchableOpacity
-              style={styles.contextBanner}
-              onPress={() => setShowUserNote(!showUserNote)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.contextBannerHeader}>
-                <MessageSquare size={18} color="#10b981" />
-                <Text style={styles.contextBannerTitle}>Your Context</Text>
-                {showUserNote ? (
-                  <ChevronUp size={18} color="#6b7280" />
-                ) : (
-                  <ChevronDown size={18} color="#6b7280" />
-                )}
-              </View>
-              {showUserNote && (
-                <>
-                  <Text style={styles.contextBannerText}>{userNote}</Text>
-                  {usedUserNote && (
-                    <View style={styles.contextHintBadge}>
-                      <Text style={styles.contextHintText}>
-                        ✓ We used your note to refine portions
-                      </Text>
-                    </View>
-                  )}
-                </>
-              )}
-            </TouchableOpacity>
+            <ContextBanner
+              text={userNote}
+              onEdit={editingContext ? undefined : () => setEditingContext(true)}
+              confidenceImpact={usedUserNote ? 15 : undefined}
+              collapsible
+            />
           )}
 
           <View style={styles.mealTypeSection}>
@@ -478,45 +458,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#ffffff',
-  },
-  contextBanner: {
-    padding: 16,
-    backgroundColor: '#f0fdf4',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#86efac',
-    marginBottom: 20,
-    gap: 12,
-  },
-  contextBannerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  contextBannerTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#059669',
-  },
-  contextBannerText: {
-    fontSize: 14,
-    color: '#047857',
-    lineHeight: 20,
-    marginTop: 4,
-  },
-  contextHintBadge: {
-    backgroundColor: '#d1fae5',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  contextHintText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#059669',
   },
   notesCard: {
     flexDirection: 'row',
