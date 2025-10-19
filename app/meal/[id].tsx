@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChevronLeft, Trash2, Edit } from 'lucide-react-native';
+import { ChevronLeft, Trash2, Edit, Camera, MessageSquare } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
@@ -24,6 +24,8 @@ interface MealLog {
   total_fat: number;
   photo_url: string | null;
   notes: string | null;
+  source: 'manual' | 'photo' | 'ai';
+  photo_analysis_id: string | null;
 }
 
 interface MealLogItem {
@@ -177,12 +179,28 @@ export default function MealDetail() {
             </View>
           </View>
 
-          {meal.notes && (
-            <View style={styles.notesSection}>
-              <Text style={styles.notesLabel}>Notes</Text>
-              <Text style={styles.notesText}>{meal.notes}</Text>
+          <View style={styles.provenanceSection}>
+            <Text style={styles.provenanceLabel}>Source</Text>
+            <View style={styles.provenanceBadge}>
+              {meal.source === 'photo' || meal.source === 'ai' ? (
+                <Camera size={16} color="#3b82f6" />
+              ) : null}
+              <Text style={styles.provenanceText}>
+                {meal.source === 'photo'
+                  ? 'Photo + AI Analysis'
+                  : meal.source === 'ai'
+                    ? 'AI Analysis'
+                    : 'Manual Entry'}
+              </Text>
             </View>
-          )}
+            {meal.notes && (
+              <View style={styles.userNoteBox}>
+                <MessageSquare size={14} color="#10b981" />
+                <Text style={styles.userNoteLabel}>Your note:</Text>
+                <Text style={styles.userNoteText}>{meal.notes}</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -327,21 +345,54 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6b7280',
   },
-  notesSection: {
+  provenanceSection: {
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
-    gap: 8,
+    gap: 12,
   },
-  notesLabel: {
-    fontSize: 14,
+  provenanceLabel: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  notesText: {
-    fontSize: 14,
-    color: '#1f2937',
-    lineHeight: 20,
+  provenanceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#eff6ff',
+  },
+  provenanceText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1e40af',
+  },
+  userNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 12,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#86efac',
+  },
+  userNoteLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  userNoteText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#047857',
+    lineHeight: 18,
   },
   section: {
     padding: 24,

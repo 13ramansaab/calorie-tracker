@@ -7,21 +7,39 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { Camera, FlipHorizontal, X, Check, ImageIcon } from 'lucide-react-native';
+import { Camera, FlipHorizontal, X, Check, ImageIcon, MessageSquare } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 
 interface CameraCaptureProps {
-  onPhotoCapture: (uri: string) => void;
+  onPhotoCapture: (uri: string, context?: CaptureContext) => void;
   onCancel: () => void;
 }
+
+interface CaptureContext {
+  userNote?: string;
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+}
+
+const CONTEXT_EXAMPLES = [
+  '2 chapatis with dal',
+  '3 idlis with sambar',
+  'Small bowl of rice',
+  'Lunch thali',
+  '1 dosa with chutney',
+];
 
 export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) {
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showContextInput, setShowContextInput] = useState(false);
+  const [userNote, setUserNote] = useState('');
+  const [selectedMealType, setSelectedMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
   const cameraRef = useRef<CameraView>(null);
 
   if (!permission) {
@@ -89,7 +107,11 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
 
   const handleConfirm = () => {
     if (capturedPhoto) {
-      onPhotoCapture(capturedPhoto);
+      const context: CaptureContext = {
+        userNote: userNote.trim() || undefined,
+        mealType: selectedMealType,
+      };
+      onPhotoCapture(capturedPhoto, context);
     }
   };
 
@@ -104,7 +126,63 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
   if (capturedPhoto) {
     return (
       <View style={styles.container}>
-        <Image source={{ uri: capturedPhoto }} style={styles.preview} />
+        <ScrollView style={styles.previewContainer} contentContainerStyle={styles.previewContent}>
+          <Image source={{ uri: capturedPhoto }} style={styles.previewImage} />
+
+          <View style={styles.contextSection}>
+            <View style={styles.contextHeader}>
+              <MessageSquare size={20} color="#10b981" />
+              <Text style={styles.contextTitle}>Add Context (Optional)</Text>
+            </View>
+            <Text style={styles.contextHint}>Help us identify portions & items more accurately</Text>
+
+            <View style={styles.mealTypeSelector}>
+              {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.mealTypeChip,
+                    selectedMealType === type && styles.mealTypeChipActive,
+                  ]}
+                  onPress={() => setSelectedMealType(type)}
+                >
+                  <Text
+                    style={[
+                      styles.mealTypeText,
+                      selectedMealType === type && styles.mealTypeTextActive,
+                    ]}
+                  >
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.contextInput}
+              placeholder="e.g., 2 chapatis with dal, 3 idlis"
+              placeholderTextColor="#9ca3af"
+              value={userNote}
+              onChangeText={setUserNote}
+              multiline
+              numberOfLines={2}
+              maxLength={150}
+            />
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.examplesScroll}>
+              {CONTEXT_EXAMPLES.map((example, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.exampleChip}
+                  onPress={() => setUserNote(example)}
+                >
+                  <Text style={styles.exampleText}>{example}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </ScrollView>
+
         <View style={styles.previewControls}>
           <TouchableOpacity style={styles.previewButton} onPress={handleRetake}>
             <X size={24} color="#ffffff" />
@@ -115,7 +193,7 @@ export function CameraCapture({ onPhotoCapture, onCancel }: CameraCaptureProps) 
             onPress={handleConfirm}
           >
             <Check size={24} color="#ffffff" />
-            <Text style={styles.previewButtonText}>Use Photo</Text>
+            <Text style={styles.previewButtonText}>Analyze</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -276,9 +354,86 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  preview: {
+  previewContainer: {
     flex: 1,
-    resizeMode: 'contain',
+    backgroundColor: '#ffffff',
+  },
+  previewContent: {
+    paddingBottom: 140,
+  },
+  previewImage: {
+    width: '100%',
+    height: 400,
+    resizeMode: 'cover',
+  },
+  contextSection: {
+    padding: 20,
+    gap: 12,
+  },
+  contextHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  contextTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  contextHint: {
+    fontSize: 14,
+    color: '#6b7280',
+    lineHeight: 20,
+  },
+  mealTypeSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  mealTypeChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  mealTypeChipActive: {
+    backgroundColor: '#d1fae5',
+    borderColor: '#10b981',
+  },
+  mealTypeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  mealTypeTextActive: {
+    color: '#059669',
+  },
+  contextInput: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: '#1f2937',
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  examplesScroll: {
+    marginTop: 4,
+  },
+  exampleChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    marginRight: 8,
+  },
+  exampleText: {
+    fontSize: 13,
+    color: '#6b7280',
   },
   previewControls: {
     position: 'absolute',

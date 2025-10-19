@@ -10,7 +10,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { X, Plus, Lightbulb, AlertCircle } from 'lucide-react-native';
+import { X, Plus, Lightbulb, AlertCircle, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { AnalysisItemRow } from './AIComponents';
 import { NumberInput } from './FormInput';
 import { Chips } from './Chips';
@@ -29,6 +29,7 @@ interface AIAnalysisSheetProps {
   visible: boolean;
   photoUri?: string;
   mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  userNote?: string;
   onClose: () => void;
   onSave: (items: DetectedFood[], mealType: string, photoUri?: string) => void;
 }
@@ -37,6 +38,7 @@ export function AIAnalysisSheet({
   visible,
   photoUri,
   mealType = 'lunch',
+  userNote,
   onClose,
   onSave,
 }: AIAnalysisSheetProps) {
@@ -47,6 +49,8 @@ export function AIAnalysisSheet({
   const [selectedMealType, setSelectedMealType] = useState(mealType);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingPortion, setEditingPortion] = useState(100);
+  const [showUserNote, setShowUserNote] = useState(true);
+  const [usedUserNote, setUsedUserNote] = useState(false);
 
   useEffect(() => {
     if (visible && photoUri && !analysis) {
@@ -67,8 +71,13 @@ export function AIAnalysisSheet({
         userContext: {
           region: profile?.region,
           dietaryPrefs: profile?.dietary_preferences,
+          auxText: userNote,
         },
       });
+
+      if (userNote && userNote.trim()) {
+        setUsedUserNote(true);
+      }
 
       setAnalysis(result);
 
@@ -178,6 +187,36 @@ export function AIAnalysisSheet({
         <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
           {photoUri && (
             <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+          )}
+
+          {userNote && userNote.trim() && (
+            <TouchableOpacity
+              style={styles.contextBanner}
+              onPress={() => setShowUserNote(!showUserNote)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.contextBannerHeader}>
+                <MessageSquare size={18} color="#10b981" />
+                <Text style={styles.contextBannerTitle}>Your Context</Text>
+                {showUserNote ? (
+                  <ChevronUp size={18} color="#6b7280" />
+                ) : (
+                  <ChevronDown size={18} color="#6b7280" />
+                )}
+              </View>
+              {showUserNote && (
+                <>
+                  <Text style={styles.contextBannerText}>{userNote}</Text>
+                  {usedUserNote && (
+                    <View style={styles.contextHintBadge}>
+                      <Text style={styles.contextHintText}>
+                        ✓ We used your note to refine portions
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </TouchableOpacity>
           )}
 
           <View style={styles.mealTypeSection}>
@@ -439,6 +478,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  contextBanner: {
+    padding: 16,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#86efac',
+    marginBottom: 20,
+    gap: 12,
+  },
+  contextBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  contextBannerTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  contextBannerText: {
+    fontSize: 14,
+    color: '#047857',
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  contextHintBadge: {
+    backgroundColor: '#d1fae5',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  contextHintText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#059669',
   },
   notesCard: {
     flexDirection: 'row',
