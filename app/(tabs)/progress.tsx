@@ -14,11 +14,12 @@ import Svg, { Line, Circle, Polyline } from 'react-native-svg';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Calendar, TrendingUp, Image as ImageIcon, Award } from 'lucide-react-native';
+import { ProgressCharts } from '@/components/ProgressCharts';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 48;
 
-type TimeRange = 'day' | 'week' | 'month';
+type TimeRange = 'week' | 'month';
 
 interface DailyData {
   date: string;
@@ -197,7 +198,7 @@ export default function ProgressTab() {
 
       <View style={styles.content}>
         <View style={styles.timeRangeSelector}>
-          {(['day', 'week', 'month'] as TimeRange[]).map((range) => (
+          {(['week', 'month'] as TimeRange[]).map((range) => (
             <TouchableOpacity
               key={range}
               style={[
@@ -218,22 +219,16 @@ export default function ProgressTab() {
           ))}
         </View>
 
-        <View style={styles.chartCard}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Calorie Trend</Text>
-            <View style={styles.legendItem}>
-              <View style={styles.legendDot} />
-              <Text style={styles.legendText}>Daily Goal</Text>
-            </View>
+        {dailyData.length > 0 ? (
+          <ProgressCharts
+            data={dailyData.map(d => ({ ...d, goal: goal.calories }))}
+            period={timeRange === 'week' ? 7 : 30}
+          />
+        ) : (
+          <View style={styles.emptyChart}>
+            <Text style={styles.emptyText}>No data for this period</Text>
           </View>
-          {dailyData.length > 0 ? (
-            renderCalorieChart()
-          ) : (
-            <View style={styles.emptyChart}>
-              <Text style={styles.emptyText}>No data for this period</Text>
-            </View>
-          )}
-        </View>
+        )}
 
         <View style={styles.statsCard}>
           <Text style={styles.statsTitle}>Average Daily Intake</Text>

@@ -32,7 +32,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'Basic nutrition tracking',
       'Daily calorie goals',
       'Food search',
-      '3 photo analyses per day',
+      '1 photo analysis per day',
+      '5 AI chat messages per day',
     ],
   },
   {
@@ -68,8 +69,11 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 ];
 
 export const FREE_TIER_LIMITS = {
-  photoAnalysesPerDay: 3,
+  photoAnalysesPerDay: 1,
+  aiChatsPerDay: 5,
   mealPlans: 0,
   dataExports: 0,
   advancedInsights: false,
 };
+
+export const TRIAL_DURATION_DAYS = 7;

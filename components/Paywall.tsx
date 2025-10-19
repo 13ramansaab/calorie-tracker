@@ -7,14 +7,19 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X, CheckCircle, Sparkles } from 'lucide-react-native';
-import { SUBSCRIPTION_PLANS, FREE_TIER_LIMITS } from '@/types/subscription';
+import { useRouter } from 'expo-router';
+import { SUBSCRIPTION_PLANS, FREE_TIER_LIMITS, TRIAL_DURATION_DAYS } from '@/types/subscription';
+import { startFreeTrial } from '@/lib/subscriptionService';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface PaywallProps {
   visible: boolean;
   onClose: () => void;
+  onStartTrial?: () => void;
   feature?: string;
   usageCount?: number;
   usageLimit?: number;
@@ -23,22 +28,52 @@ interface PaywallProps {
 export function Paywall({
   visible,
   onClose,
+  onStartTrial,
   feature = 'Premium Features',
   usageCount,
   usageLimit,
 }: PaywallProps) {
   const [selectedPlan, setSelectedPlan] = useState('premium-monthly');
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const { user } = useAuth();
 
   const premiumPlans = SUBSCRIPTION_PLANS.filter((p) => p.tier === 'premium');
 
+  const handleStartTrial = async () => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to start your trial');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await startFreeTrial(user.id);
+      Alert.alert(
+        'Trial Started!',
+        `Your ${TRIAL_DURATION_DAYS}-day free trial has begun. Enjoy unlimited access to all premium features!`,
+        [
+          {
+            text: 'Start Using',
+            onPress: () => {
+              onStartTrial?.();
+              onClose();
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error starting trial:', error);
+      Alert.alert('Error', 'Failed to start trial. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubscribe = async () => {
     setLoading(true);
-
-    setTimeout(() => {
-      setLoading(false);
-      onClose();
-    }, 2000);
+    router.push('/subscription');
+    setLoading(false);
   };
 
   return (
@@ -161,7 +196,7 @@ export function Paywall({
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.subscribeButton}
-            onPress={handleSubscribe}
+            onPress={handleStartTrial}
             disabled={loading}
           >
             <LinearGradient
@@ -172,11 +207,20 @@ export function Paywall({
                 <ActivityIndicator color="#ffffff" />
               ) : (
                 <>
-                  <Text style={styles.subscribeButtonText}>Start Free Trial</Text>
-                  <Text style={styles.subscribeSubtext}>7 days free, then billed</Text>
+                  <Text style={styles.subscribeButtonText}>
+                    Start {TRIAL_DURATION_DAYS}-Day Free Trial
+                  </Text>
+                  <Text style={styles.subscribeSubtext}>No card required</Text>
                 </>
               )}
             </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.upgradeButton}
+            onPress={handleSubscribe}
+            disabled={loading}
+          >
+            <Text style={styles.upgradeButtonText}>Subscribe Now</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.maybeLaterButton} onPress={onClose}>
             <Text style={styles.maybeLaterText}>Maybe Later</Text>
@@ -426,6 +470,19 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     opacity: 0.9,
     marginTop: 2,
+  },
+  upgradeButton: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#10b981',
+  },
+  upgradeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#10b981',
   },
   maybeLaterButton: {
     paddingVertical: 12,
