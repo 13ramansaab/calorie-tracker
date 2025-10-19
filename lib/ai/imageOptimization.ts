@@ -12,6 +12,8 @@ export interface ImageOptimizationResult {
   sizeBytes: number;
   wasOptimized: boolean;
   originalSize?: number;
+  exifStripped: boolean;
+  savingsPercent?: number;
 }
 
 export async function optimizeImageForAnalysis(
@@ -32,45 +34,38 @@ export async function optimizeImageForAnalysis(
       );
     }
 
-    // If image is already small enough, return as-is
-    if (originalSize <= MAX_IMAGE_SIZE_BYTES * 0.8) {
-      return {
-        uri: imageUri,
-        width: 1920, // Default dimensions
-        height: 1080,
-        sizeBytes: originalSize,
-        wasOptimized: false,
-      };
-    }
-
-    // Optimize the image
+    // Always process image to strip EXIF data (privacy/security)
+    // Even if size is OK, we need to remove metadata
     const manipResult = await ImageManipulator.manipulateAsync(
       imageUri,
-      [{ resize: { width: MAX_IMAGE_EDGE, height: MAX_IMAGE_EDGE } }],
-      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      originalSize > MAX_IMAGE_SIZE_BYTES * 0.8
+        ? [{ resize: { width: MAX_IMAGE_EDGE, height: MAX_IMAGE_EDGE } }]
+        : [],
+      {
+        compress: 0.8,
+        format: ImageManipulator.SaveFormat.JPEG,
+      }
     );
 
     const optimizedInfo = await FileSystem.getInfoAsync(manipResult.uri);
     const optimizedSize = (optimizedInfo as any).size || 0;
 
+    const savingsPercent =
+      originalSize > 0 ? ((originalSize - optimizedSize) / originalSize) * 100 : 0;
+
     return {
       uri: manipResult.uri,
-      width: MAX_IMAGE_EDGE,
-      height: MAX_IMAGE_EDGE,
+      width: manipResult.width || MAX_IMAGE_EDGE,
+      height: manipResult.height || MAX_IMAGE_EDGE,
       sizeBytes: optimizedSize,
-      wasOptimized: true,
+      wasOptimized: originalSize > MAX_IMAGE_SIZE_BYTES * 0.8,
       originalSize,
+      exifStripped: true,
+      savingsPercent,
     };
   } catch (error) {
     console.error('Image optimization error:', error);
-    // Return the original image if optimization fails
-    return {
-      uri: imageUri,
-      width: 1920,
-      height: 1080,
-      sizeBytes: 0,
-      wasOptimized: false,
-    };
+    throw error;
   }
 }
 
