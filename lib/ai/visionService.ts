@@ -21,10 +21,16 @@ export async function analyzePhotoWithVision(
     const contextPrompt = buildPromptConfig(
       input.userContext?.region,
       input.userContext?.dietaryPrefs,
-      input.userContext?.recentFoods
+      input.userContext?.recentFoods,
+      input.userContext?.auxText
     );
 
-    const userPrompt = VISION_PROMPT_TEMPLATE(input.mealType, input.userContext?.region);
+    const userPrompt = VISION_PROMPT_TEMPLATE(
+      input.mealType,
+      input.userContext?.region,
+      input.userContext?.dietaryPrefs,
+      input.userContext?.auxText
+    );
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -125,6 +131,7 @@ function formatAnalysisResponse(
     carbs: food.carbs || 0,
     fat: food.fat || 0,
     confidence: food.confidence || 50,
+    noteInfluence: food.note_influence || 'none',
   }));
 
   const totals = foods.reduce(

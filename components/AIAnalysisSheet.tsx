@@ -15,8 +15,16 @@ import { AnalysisItemRow } from './AIComponents';
 import { NumberInput } from './FormInput';
 import { Chips } from './Chips';
 import { ContextBanner } from './ContextBanner';
-import { AnalysisResponse, DetectedFood } from '@/types/ai';
+import { ConflictChipGroup } from './ConflictChipGroup';
+import { AnalysisResponse, DetectedFood, ConflictDetection } from '@/types/ai';
 import { analyzePhotoWithVision } from '@/lib/ai/visionService';
+import { detectConflicts, resolveConflict } from '@/lib/ai/conflictDetection';
+import {
+  logNoteEntered,
+  logNoteUsedInAnalysis,
+  logNoteConflictShown,
+  logConflictChoiceSelected,
+} from '@/lib/ai/instrumentation';
 import { mapDetectedFoodToDatabase } from '@/lib/ai/mappingService';
 import {
   calculateOverallConfidence,
@@ -52,6 +60,8 @@ export function AIAnalysisSheet({
   const [editingPortion, setEditingPortion] = useState(100);
   const [usedUserNote, setUsedUserNote] = useState(false);
   const [editingContext, setEditingContext] = useState(false);
+  const [conflicts, setConflicts] = useState<ConflictDetection[]>([]);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible && photoUri && !analysis) {
@@ -78,9 +88,13 @@ export function AIAnalysisSheet({
 
       if (userNote && userNote.trim()) {
         setUsedUserNote(true);
+        logNoteEntered(userNote.length, selectedMealType);
       }
 
       setAnalysis(result);
+
+      const detectedConflicts = detectConflicts(result.foods, userNote);
+      setConflicts(detectedConflicts);
 
       const mappedFoods = await Promise.all(
         result.foods.map(async (food) => {
@@ -117,14 +131,52 @@ export function AIAnalysisSheet({
 
       setFoods(mappedFoods);
 
-      await supabase.from('photo_analyses').insert({
-        user_id: user.id,
-        photo_url: photoUri,
-        raw_response: result,
-        overall_confidence: result.overallConfidence,
-        model_version: result.modelVersion,
-        status: 'reviewed',
-      });
+      const itemsInfluenced = mappedFoods.filter(
+        (f) => f.noteInfluence && f.noteInfluence !== 'none'
+      ).length;
+
+      const influenceTypes = mappedFoods
+        .filter((f) => f.noteInfluence && f.noteInfluence !== 'none')
+        .map((f) => f.noteInfluence!);
+
+      const { data: insertData, error: insertError } = await supabase
+        .from('photo_analyses')
+        .insert({
+          user_id: user.id,
+          photo_url: photoUri,
+          raw_response: result,
+          overall_confidence: result.overallConfidence,
+          model_version: result.modelVersion,
+          status: 'reviewed',
+          user_note: userNote || null,
+          note_used: !!userNote && itemsInfluenced > 0,
+          note_influence_summary: mappedFoods
+            .filter((f) => f.noteInfluence && f.noteInfluence !== 'none')
+            .map((f) => ({
+              item: f.name,
+              influence: f.noteInfluence,
+            })),
+        })
+        .select('id')
+        .single();
+
+      if (!insertError && insertData) {
+        setAnalysisId(insertData.id);
+
+        if (userNote && itemsInfluenced > 0) {
+          logNoteUsedInAnalysis(insertData.id, itemsInfluenced, influenceTypes);
+        }
+
+        if (detectedConflicts.length > 0) {
+          logNoteConflictShown(
+            insertData.id,
+            detectedConflicts.map((c) => ({
+              itemName: c.itemName,
+              conflictType: c.conflictType,
+            }))
+          );
+        }
+      }
     } catch (error) {
       console.error('Analysis error:', error);
       Alert.alert('Analysis Failed', 'Please add items manually or try again.');
@@ -242,10 +294,41 @@ export function AIAnalysisSheet({
 
               <View style={styles.foodsList}>
                 <Text style={styles.sectionLabel}>Detected Foods</Text>
-                {foods.map((food, index) => (
-                  <View key={index}>
-                    {editingIndex === index ? (
-                      <View style={styles.editCard}>
+                {foods.map((food, index) => {
+                  const foodConflict = conflicts.find(
+                    (c) => c.itemName === food.name
+                  );
+
+                  return (
+                    <View key={index}>
+                      {foodConflict && (
+                        <ConflictChipGroup
+                          itemName={foodConflict.itemName}
+                          modelValue={foodConflict.modelValue}
+                          noteValue={foodConflict.noteValue}
+                          conflictType={foodConflict.conflictType}
+                          onPick={(value, source) => {
+                            const resolved = resolveConflict(food, value, source);
+                            const updatedFoods = [...foods];
+                            updatedFoods[index] = resolved;
+                            setFoods(updatedFoods);
+
+                            setConflicts(conflicts.filter((c) => c !== foodConflict));
+
+                            if (analysisId) {
+                              logConflictChoiceSelected(
+                                analysisId,
+                                foodConflict.itemName,
+                                source,
+                                foodConflict.conflictType
+                              );
+                            }
+                          }}
+                        />
+                      )}
+
+                      {editingIndex === index ? (
+                        <View style={styles.editCard}>
                         <Text style={styles.editLabel}>{food.name}</Text>
                         <NumberInput
                           label="Portion"
@@ -270,18 +353,19 @@ export function AIAnalysisSheet({
                           </TouchableOpacity>
                         </View>
                       </View>
-                    ) : (
-                      <AnalysisItemRow
-                        name={food.name}
-                        portion={food.portion}
-                        calories={food.calories}
-                        confidence={food.confidence}
-                        onEdit={() => handleEditFood(index)}
-                        onRemove={() => handleRemoveFood(index)}
-                      />
-                    )}
-                  </View>
-                ))}
+                        ) : (
+                          <AnalysisItemRow
+                            name={food.name}
+                            portion={food.portion}
+                            calories={food.calories}
+                            confidence={food.confidence}
+                            onEdit={() => handleEditFood(index)}
+                            onRemove={() => handleRemoveFood(index)}
+                          />
+                        )}
+                    </View>
+                  );
+                })}
               </View>
 
               {analysis?.notes && (
