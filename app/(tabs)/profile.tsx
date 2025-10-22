@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +21,8 @@ import {
   Mail,
   Shield,
   Sparkles,
+  Ruler,
+  Leaf,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -109,11 +112,12 @@ export default function ProfileTab() {
             )}
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Alert.alert('Coming Soon', 'Edit profile will be available soon')}
+              onPress={() => router.push('/settings/personal-info')}
+              activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
-                <View style={styles.menuIcon}>
-                  <User size={20} color="#6b7280" />
+                <View style={[styles.menuIcon, { backgroundColor: '#eff6ff' }]}>
+                  <User size={20} color="#3b82f6" />
                 </View>
                 <Text style={styles.menuItemText}>Personal Information</Text>
               </View>
@@ -122,11 +126,12 @@ export default function ProfileTab() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Alert.alert('Coming Soon', 'Edit goals will be available soon')}
+              onPress={() => router.push('/settings/nutrition-goals')}
+              activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
-                <View style={styles.menuIcon}>
-                  <Target size={20} color="#6b7280" />
+                <View style={[styles.menuIcon, { backgroundColor: '#ecfdf5' }]}>
+                  <Target size={20} color="#10b981" />
                 </View>
                 <Text style={styles.menuItemText}>Nutrition Goals</Text>
               </View>
@@ -135,11 +140,12 @@ export default function ProfileTab() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Alert.alert('Coming Soon', 'Preferences will be available soon')}
+              onPress={() => router.push('/settings/dietary-preferences')}
+              activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
-                <View style={styles.menuIcon}>
-                  <Settings size={20} color="#6b7280" />
+                <View style={[styles.menuIcon, { backgroundColor: '#f0fdf4' }]}>
+                  <Leaf size={20} color="#22c55e" />
                 </View>
                 <Text style={styles.menuItemText}>Dietary Preferences</Text>
               </View>
@@ -153,11 +159,12 @@ export default function ProfileTab() {
           <View style={styles.menuList}>
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Alert.alert('Coming Soon', 'Notifications settings will be available soon')}
+              onPress={() => router.push('/settings/notifications')}
+              activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
-                <View style={styles.menuIcon}>
-                  <Bell size={20} color="#6b7280" />
+                <View style={[styles.menuIcon, { backgroundColor: '#fef3c7' }]}>
+                  <Bell size={20} color="#f59e0b" />
                 </View>
                 <Text style={styles.menuItemText}>Notifications</Text>
               </View>
@@ -166,11 +173,12 @@ export default function ProfileTab() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Alert.alert('Coming Soon', 'Units settings will be available soon')}
+              onPress={() => router.push('/settings/units')}
+              activeOpacity={0.7}
             >
               <View style={styles.menuItemLeft}>
-                <View style={styles.menuIcon}>
-                  <Settings size={20} color="#6b7280" />
+                <View style={[styles.menuIcon, { backgroundColor: '#f3e8ff' }]}>
+                  <Ruler size={20} color="#9333ea" />
                 </View>
                 <Text style={styles.menuItemText}>Units & Measurements</Text>
               </View>
