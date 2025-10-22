@@ -4,11 +4,13 @@ export function useTabBarPadding() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 16);
   const tabBarHeight = 80 + bottomInset;
-  const contentPadding = tabBarHeight + 16;
+  const fabOverflow = 32;
+  const contentPadding = tabBarHeight + fabOverflow + 16;
 
   return {
     tabBarHeight,
     contentPadding,
     bottomInset,
+    fabOverflow,
   };
 }

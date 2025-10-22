@@ -322,8 +322,9 @@ export default function LogTab() {
 
       <ScrollView
         style={styles.scrollContainer}
-        contentContainerStyle={[styles.content, { paddingBottom: contentPadding + 24 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: contentPadding + 32 }]}
         showsVerticalScrollIndicator={false}
+        bounces={false}
       >
         <View style={styles.hero}>
           <View style={styles.iconContainer}>
