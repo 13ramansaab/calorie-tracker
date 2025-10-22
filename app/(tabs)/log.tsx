@@ -11,16 +11,19 @@ import {
   ScrollView,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Camera, Image as ImageIcon, X } from 'lucide-react-native';
+import { Camera, Image as ImageIcon, X, Edit3 } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/contexts/AuthContext';
 import { AIAnalysisSheet } from '@/components/AIAnalysisSheet';
 import { ContextAssistBox } from '@/components/ContextAssistBox';
+import { ManualEntryModal } from '@/components/ManualEntryModal';
 import { runPhotoAnalysis, saveMealFromAnalysis } from '@/lib/ai/analysisOrchestrator';
 import { DetectedFood } from '@/types/ai';
+import { useTabBarPadding } from '@/hooks/useTabBarPadding';
 
 export default function LogTab() {
   const { user, profile } = useAuth();
+  const { contentPadding } = useTabBarPadding();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -28,6 +31,7 @@ export default function LogTab() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [showAnalysisSheet, setShowAnalysisSheet] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false);
   const [mealType, setMealType] = useState('lunch');
   const cameraRef = useRef<CameraView>(null);
 
@@ -125,7 +129,7 @@ export default function LogTab() {
             text: 'Log Manually',
             onPress: () => {
               handleRetake();
-              Alert.alert('Coming Soon', 'Manual food search will be available soon');
+              setShowManualEntry(true);
             },
           },
         ]
@@ -150,7 +154,7 @@ export default function LogTab() {
 
     try {
       await saveMealFromAnalysis(analysisId, user.id, items, mealType);
-      
+
       setCapturedImage(null);
       setUserNote('');
       setAnalysisId(null);
@@ -162,12 +166,12 @@ export default function LogTab() {
     }
   };
 
-  const getCurrentMealType = (): string => {
-    const hour = new Date().getHours();
-    if (hour < 11) return 'breakfast';
-    if (hour < 15) return 'lunch';
-    if (hour < 18) return 'snack';
-    return 'dinner';
+  const handleOpenManualEntry = () => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to use this feature');
+      return;
+    }
+    setShowManualEntry(true);
   };
 
   if (capturedImage) {
@@ -181,7 +185,10 @@ export default function LogTab() {
           <View style={styles.closeButton} />
         </View>
 
-        <ScrollView style={styles.reviewScroll} contentContainerStyle={styles.reviewContent}>
+        <ScrollView
+          style={styles.reviewScroll}
+          contentContainerStyle={[styles.reviewContent, { paddingBottom: contentPadding + 80 }]}
+        >
           <View style={styles.previewContainer}>
             <Image source={{ uri: capturedImage }} style={styles.preview} resizeMode="cover" />
           </View>
@@ -197,6 +204,7 @@ export default function LogTab() {
                     mealType === type && styles.mealTypeChipActive,
                   ]}
                   onPress={() => setMealType(type)}
+                  activeOpacity={0.7}
                 >
                   <Text
                     style={[
@@ -214,7 +222,7 @@ export default function LogTab() {
               value={userNote}
               onChange={setUserNote}
               maxLength={140}
-              placeholder="2 chapati + 1 bowl paneer bhurji"
+              placeholder="e.g., 2 chapatis with 1 bowl paneer bhurji"
             />
           </View>
         </ScrollView>
@@ -224,6 +232,7 @@ export default function LogTab() {
             style={styles.secondaryButton}
             onPress={handleRetake}
             disabled={analyzing}
+            activeOpacity={0.7}
           >
             <Text style={styles.secondaryButtonText}>Retake</Text>
           </TouchableOpacity>
@@ -231,6 +240,7 @@ export default function LogTab() {
             style={[styles.primaryButton, analyzing && styles.primaryButtonDisabled]}
             onPress={handleAnalyzePhoto}
             disabled={analyzing}
+            activeOpacity={0.7}
           >
             {analyzing ? (
               <ActivityIndicator color="#ffffff" />
@@ -266,6 +276,7 @@ export default function LogTab() {
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={requestCameraPermission}
+              activeOpacity={0.7}
             >
               <Text style={styles.primaryButtonText}>Grant Permission</Text>
             </TouchableOpacity>
@@ -281,6 +292,7 @@ export default function LogTab() {
             <TouchableOpacity
               style={styles.cameraCloseButton}
               onPress={() => setCameraActive(false)}
+              activeOpacity={0.7}
             >
               <X size={24} color="#ffffff" />
             </TouchableOpacity>
@@ -289,7 +301,11 @@ export default function LogTab() {
           </View>
 
           <View style={styles.cameraFooter}>
-            <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
+            <TouchableOpacity
+              style={styles.captureButton}
+              onPress={takePicture}
+              activeOpacity={0.8}
+            >
               <View style={styles.captureButtonInner} />
             </TouchableOpacity>
           </View>
@@ -304,14 +320,18 @@ export default function LogTab() {
         <Text style={styles.headerTitle}>Log a Meal</Text>
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={[styles.content, { paddingBottom: contentPadding + 24 }]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.hero}>
           <View style={styles.iconContainer}>
             <Camera size={48} color="#10b981" />
           </View>
-          <Text style={styles.heroTitle}>Snap and Track</Text>
+          <Text style={styles.heroTitle}>Track Your Nutrition</Text>
           <Text style={styles.heroSubtitle}>
-            Take a photo of your meal for instant AI-powered nutrition analysis
+            Choose how you'd like to log your meal
           </Text>
         </View>
 
@@ -320,41 +340,89 @@ export default function LogTab() {
             <TouchableOpacity
               style={styles.optionCard}
               onPress={requestCameraPermission}
+              activeOpacity={0.7}
             >
-              <View style={styles.optionIconContainer}>
-                <Camera size={32} color="#10b981" />
+              <View style={[styles.optionIconContainer, { backgroundColor: '#dbeafe' }]}>
+                <Camera size={32} color="#3b82f6" />
               </View>
-              <Text style={styles.optionTitle}>Take Photo</Text>
-              <Text style={styles.optionDescription}>
-                Capture your meal with camera
-              </Text>
+              <View style={styles.optionContent}>
+                <Text style={styles.optionTitle}>📸 Snap and Track</Text>
+                <Text style={styles.optionDescription}>
+                  Capture your meal with camera for instant AI analysis
+                </Text>
+              </View>
+              <View style={styles.optionArrow}>
+                <Text style={styles.optionArrowText}>→</Text>
+              </View>
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity style={styles.optionCard} onPress={pickImage}>
-            <View style={styles.optionIconContainer}>
-              <ImageIcon size={32} color="#10b981" />
+          <TouchableOpacity
+            style={styles.optionCard}
+            onPress={pickImage}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.optionIconContainer, { backgroundColor: '#fef3c7' }]}>
+              <ImageIcon size={32} color="#f59e0b" />
             </View>
-            <Text style={styles.optionTitle}>Upload Photo</Text>
-            <Text style={styles.optionDescription}>
-              Choose from your photo library
-            </Text>
+            <View style={styles.optionContent}>
+              <Text style={styles.optionTitle}>🖼️ Upload Photo</Text>
+              <Text style={styles.optionDescription}>
+                Choose an image from your gallery for AI detection
+              </Text>
+            </View>
+            <View style={styles.optionArrow}>
+              <Text style={styles.optionArrowText}>→</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={styles.manualCard}
+            onPress={handleOpenManualEntry}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.optionIconContainer, { backgroundColor: '#d1fae5' }]}>
+              <Edit3 size={32} color="#10b981" />
+            </View>
+            <View style={styles.optionContent}>
+              <Text style={styles.optionTitle}>✍️ Manually Log a Meal</Text>
+              <Text style={styles.optionDescription}>
+                Type your meal naturally — AI will estimate nutrition
+              </Text>
+              <View style={styles.examplesBox}>
+                <Text style={styles.examplesLabel}>Examples:</Text>
+                <Text style={styles.exampleText}>• "2 chapatis with 1 bowl rajma"</Text>
+                <Text style={styles.exampleText}>• "1 idli sambar and coconut chutney"</Text>
+                <Text style={styles.exampleText}>• "100g Greek yogurt with almonds"</Text>
+              </View>
+            </View>
+            <View style={styles.optionArrow}>
+              <Text style={styles.optionArrowText}>→</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
+        <View style={styles.featureHighlight}>
+          <Text style={styles.featureTitle}>✨ AI-Powered Analysis</Text>
+          <Text style={styles.featureDescription}>
+            Our intelligent system understands Indian meals and portions, providing accurate calorie, protein, carbs, and fat estimates in seconds.
+          </Text>
         </View>
+      </ScrollView>
 
-        <TouchableOpacity
-          style={styles.manualButton}
-          onPress={() => Alert.alert('Coming Soon', 'Manual search will be implemented')}
-        >
-          <Text style={styles.manualButtonText}>Search Food Database</Text>
-        </TouchableOpacity>
-      </View>
+      <ManualEntryModal
+        visible={showManualEntry}
+        onClose={() => setShowManualEntry(false)}
+        userId={user?.id}
+        userRegion={profile?.region}
+        dietaryPrefs={profile?.dietary_preferences}
+      />
     </View>
   );
 }
@@ -364,15 +432,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
+  scrollContainer: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
   },
   headerTitle: {
     fontSize: 20,
@@ -386,13 +458,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   content: {
-    flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingTop: 32,
   },
   hero: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   iconContainer: {
     width: 96,
@@ -404,54 +475,106 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   heroTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700',
     color: '#1f2937',
     marginBottom: 8,
   },
   heroSubtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#6b7280',
     textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 20,
+    lineHeight: 22,
   },
   optionsContainer: {
     gap: 16,
-    marginBottom: 32,
   },
   optionCard: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 24,
+    padding: 20,
     borderWidth: 2,
     borderColor: '#e5e7eb',
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  manualCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: '#10b981',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 16,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   optionIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#d1fae5',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+  },
+  optionContent: {
+    flex: 1,
   },
   optionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#1f2937',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   optionDescription: {
     fontSize: 14,
     color: '#6b7280',
-    textAlign: 'center',
+    lineHeight: 20,
+  },
+  optionArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionArrowText: {
+    fontSize: 20,
+    color: '#6b7280',
+  },
+  examplesBox: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  examplesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 6,
+  },
+  exampleText: {
+    fontSize: 12,
+    color: '#047857',
+    lineHeight: 18,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 8,
     gap: 16,
   },
   dividerLine: {
@@ -461,21 +584,27 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#9ca3af',
     fontWeight: '500',
   },
-  manualButton: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#10b981',
+  featureHighlight: {
+    marginTop: 32,
+    padding: 20,
+    backgroundColor: '#eff6ff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
   },
-  manualButtonText: {
+  featureTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#10b981',
+    fontWeight: '700',
+    color: '#1e40af',
+    marginBottom: 8,
+  },
+  featureDescription: {
+    fontSize: 14,
+    color: '#1e3a8a',
+    lineHeight: 20,
   },
   camera: {
     flex: 1,
@@ -555,11 +684,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   mealTypeChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     borderRadius: 20,
     backgroundColor: '#f3f4f6',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#e5e7eb',
   },
   mealTypeChipActive: {
@@ -573,7 +702,7 @@ const styles = StyleSheet.create({
   },
   mealTypeChipTextActive: {
     color: '#10b981',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   actions: {
     flexDirection: 'row',
@@ -597,7 +726,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#ffffff',
   },
   secondaryButton: {
@@ -606,7 +735,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#d1d5db',
   },
   secondaryButtonText: {
